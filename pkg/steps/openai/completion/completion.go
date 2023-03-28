@@ -166,6 +166,7 @@ func (s *Step) RunCompletion(ctx context.Context, prompt, engine string) error {
 				return nil
 			}
 			if err != nil {
+				s.state = StepFinished
 				s.output <- helpers.NewErrorResult[string](err)
 				return nil
 			}
@@ -299,6 +300,7 @@ func (s *Step) RunChatCompletion(ctx context.Context, prompt, engine string) err
 				return nil
 			}
 			if err != nil {
+				s.state = StepFinished
 				s.output <- helpers.NewErrorResult[string](err)
 				return nil
 			}

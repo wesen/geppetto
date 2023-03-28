@@ -135,6 +135,7 @@ func (s *Step) Run(ctx context.Context, messages []Message) error {
 				return nil
 			}
 			if err != nil {
+				s.state = StepFinished
 				s.output <- helpers.NewErrorResult[string](err)
 				return nil
 			}
