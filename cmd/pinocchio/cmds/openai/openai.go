@@ -425,4 +425,9 @@ func init() {
 		panic(err)
 	}
 	OpenaiCmd.AddCommand(ModelsCmd)
+
+	proxyCommand, err := NewProxyCommand()
+	cobra.CheckErr(err)
+	OpenaiCmd.AddCommand(proxyCommand)
+
 }

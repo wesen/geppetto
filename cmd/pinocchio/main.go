@@ -98,7 +98,7 @@ func main() {
 
 var runCommandCmd = &cobra.Command{
 	Use:   "run-command",
-	Short: "Run a command from a file",
+	Short: "Handle a command from a file",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		panic(fmt.Errorf("not implemented"))
