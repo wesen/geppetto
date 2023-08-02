@@ -38,9 +38,11 @@ type GeppettoCommandDescription struct {
 	// TODO(manuel, 2023-02-04) This now has a hack to switch the step type
 	Step *steps.StepDescription `yaml:"step,omitempty"`
 
-	Prompt       string                      `yaml:"prompt,omitempty"`
-	Messages     []*geppetto_context.Message `yaml:"messages,omitempty"`
-	SystemPrompt string                      `yaml:"system-prompt,omitempty"`
+	Prompt       string                                  `yaml:"prompt,omitempty"`
+	Messages     []*geppetto_context.Message             `yaml:"messages,omitempty"`
+	SystemPrompt string                                  `yaml:"system-prompt,omitempty"`
+	Functions    []*geppetto_context.FunctionDescription `yaml:"functions,omitempty"`
+	FunctionCall string                                  `yaml:"function-call,omitempty"`
 }
 
 func HelpersParameterLayer() (layers.ParameterLayer, error) {
@@ -82,6 +84,8 @@ type GeppettoCommand struct {
 	Factories    map[string]interface{} `yaml:"__factories,omitempty"`
 	Prompt       string
 	Messages     []*geppetto_context.Message
+	Functions    []*geppetto_context.FunctionDescription
+	FunctionCall string
 	SystemPrompt string
 }
 
@@ -102,6 +106,18 @@ func WithMessages(messages []*geppetto_context.Message) GeppettoCommandOption {
 func WithSystemPrompt(systemPrompt string) GeppettoCommandOption {
 	return func(g *GeppettoCommand) {
 		g.SystemPrompt = systemPrompt
+	}
+}
+
+func WithFunctions(functions []*geppetto_context.FunctionDescription) GeppettoCommandOption {
+	return func(g *GeppettoCommand) {
+		g.Functions = functions
+	}
+}
+
+func WithFunctionCall(functionCall string) GeppettoCommandOption {
+	return func(g *GeppettoCommand) {
+		g.FunctionCall = functionCall
 	}
 }
 
@@ -266,6 +282,9 @@ func (g *GeppettoCommand) Run(
 			Time: time.Now(),
 		})
 	}
+
+	contextManager.AddFunctions(g.Functions...)
+	contextManager.FunctionCall = g.FunctionCall
 
 	printPrompt, ok := ps["print-prompt"]
 	if ok && printPrompt.(bool) {
@@ -432,6 +451,8 @@ func (g *GeppettoCommandLoader) LoadCommandFromYAML(
 		WithPrompt(scd.Prompt),
 		WithMessages(scd.Messages),
 		WithSystemPrompt(scd.SystemPrompt),
+		WithFunctions(scd.Functions),
+		WithFunctionCall(scd.FunctionCall),
 	)
 	if err != nil {
 		return nil, err

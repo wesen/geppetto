@@ -272,6 +272,12 @@ func (s *Step) RunChatCompletion(
 		return err
 	}
 
+	functions := manager.Functions
+	openAiFunctions, err := geppetto_context.ConvertFunctionsToOpenAIFunctions(functions)
+	if err != nil {
+		return err
+	}
+
 	req := openai.ChatCompletionRequest{
 		Model:            engine,
 		MaxTokens:        maxTokens,
@@ -284,6 +290,8 @@ func (s *Step) RunChatCompletion(
 		FrequencyPenalty: float32(frequencyPenalty),
 		LogitBias:        nil,
 		Messages:         openAiMessages,
+		Functions:        openAiFunctions,
+		FunctionCall:     manager.GetFunctionCall(),
 	}
 
 	// TODO(manuel, 2023-02-04) Handle multiple outputs
@@ -312,7 +320,12 @@ func (s *Step) RunChatCompletion(
 				return nil
 			}
 
-			s.output <- helpers.NewPartialResult[string](response.Choices[0].Delta.Content)
+			delta := response.Choices[0].Delta
+			if delta.Content == "" && delta.FunctionCall != nil {
+				s.output <- helpers.NewPartialResult[string](delta.FunctionCall.Name + delta.FunctionCall.Arguments)
+			} else {
+				s.output <- helpers.NewPartialResult[string](response.Choices[0].Delta.Content)
+			}
 		}
 	} else {
 		resp, err := client.CreateChatCompletion(ctx, req)

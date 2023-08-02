@@ -17,6 +17,13 @@ type Message struct {
 	Role string    `json:"role" yaml:"role"`
 }
 
+type FunctionDescription struct {
+	Name        string `json:"name" yaml:"name"`
+	Description string `json:"description" yaml:"description"`
+	// JSON schema for the parameters
+	Parameters map[string]interface{} `json:"parameters" yaml:"parameters"`
+}
+
 // here is the openai definition
 // ChatCompletionRequestMessage is a message to use as the context for the chat completion API
 //
@@ -77,6 +84,8 @@ func loadFromJSONFile(filename string) ([]*Message, error) {
 
 type Manager struct {
 	Messages     []*Message
+	Functions    []*FunctionDescription
+	FunctionCall string
 	SystemPrompt string
 }
 
@@ -131,6 +140,10 @@ func (c *Manager) AddMessages(messages ...*Message) {
 	c.Messages = append(c.Messages, messages...)
 }
 
+func (c *Manager) AddFunctions(functions ...*FunctionDescription) {
+	c.Functions = append(c.Functions, functions...)
+}
+
 func (c *Manager) GetSystemPrompt() string {
 	return c.SystemPrompt
 }
@@ -177,4 +190,36 @@ func ConvertMessagesToOpenAIMessages(messages []*Message) ([]openai.ChatCompleti
 	}
 
 	return res, nil
+}
+
+func ConvertFunctionsToOpenAIFunctions(functions []*FunctionDescription) ([]openai.FunctionDefinition, error) {
+	res := make([]openai.FunctionDefinition, len(functions))
+	for i, function := range functions {
+		res[i] = openai.FunctionDefinition{
+			Name:        function.Name,
+			Description: function.Description,
+			Parameters:  function.Parameters,
+		}
+	}
+
+	return res, nil
+}
+
+func (c *Manager) GetFunctionCall() any {
+	switch c.FunctionCall {
+	case "":
+		if len(c.Functions) == 0 {
+			return nil
+		} else {
+			return "auto"
+		}
+	case "auto":
+		return "auto"
+	case "none":
+		return "none"
+	default:
+		return map[string]string{
+			"name": c.FunctionCall,
+		}
+	}
 }
