@@ -41,6 +41,12 @@ func HelpersParameterLayer() (layers.ParameterLayer, error) {
 				parameters.WithHelp("Print the prompt"),
 			),
 			parameters.NewParameterDefinition(
+				"print-templates",
+				parameters.ParameterTypeBool,
+				parameters.WithDefault(false),
+				parameters.WithHelp("Print the prompt and system prompt templates"),
+			),
+			parameters.NewParameterDefinition(
 				"system",
 				parameters.ParameterTypeString,
 				parameters.WithHelp("System message"),
@@ -122,6 +128,7 @@ func NewGeppettoCommand(
 //     (per default, from the command definition, but can be overloaded through the
 //     --system, --message-file and --append-message-file flags)
 //   - if --print-prompt is given, it prints the prompt and exits
+//   - if --print-templates, it prints the prompt and system prompt and messages templates
 //
 // It then instantiates a
 func (g *GeppettoCommand) RunIntoWriter(
@@ -149,6 +156,38 @@ func (g *GeppettoCommand) RunIntoWriter(
 	systemPrompt := g.SystemPrompt
 
 	contextManager := geppetto_context.NewManager()
+
+	printTemplates, ok := ps["print-templates"]
+	if ok && printTemplates.(bool) {
+		if g.Prompt != "" {
+			_, err := fmt.Fprintf(w, "## Prompt\n\n%s\n", g.Prompt)
+			if err != nil {
+				return err
+			}
+		}
+
+		if g.SystemPrompt != "" {
+			_, err := fmt.Fprintf(w, "## System prompt\n\n%s\n", g.SystemPrompt)
+			if err != nil {
+				return err
+			}
+		}
+
+		if len(g.Messages) != 0 {
+			_, err := fmt.Fprintf(w, "## Messages\n\n")
+			if err != nil {
+				return err
+			}
+			for _, message := range g.Messages {
+				_, err := fmt.Fprintf(w, "  - %s\n", message.Text)
+				if err != nil {
+					return err
+				}
+			}
+		}
+
+		return nil
+	}
 
 	// load and render the system prompt
 	systemPrompt_, ok := ps["system"].(string)
