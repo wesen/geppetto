@@ -274,7 +274,6 @@ func (g *GeppettoCommand) RunIntoWriter(
 	})
 
 	skipChat, _, _ := cast.GetAndCast(ps, "skip-chat", false)
-	skipChat = true
 	if skipChat {
 		return nil
 	}
