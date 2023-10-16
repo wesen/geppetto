@@ -5,9 +5,9 @@ import (
 	"fmt"
 	clay "github.com/go-go-golems/clay/pkg"
 	clay_cmds "github.com/go-go-golems/clay/pkg/cmds"
+	cmds2 "github.com/go-go-golems/geppetto/cmd/pinocchio/cmds"
 	"github.com/go-go-golems/geppetto/cmd/pinocchio/cmds/kagi"
 	"github.com/go-go-golems/geppetto/cmd/pinocchio/cmds/openai"
-	"github.com/go-go-golems/geppetto/cmd/pinocchio/cmds/openai/ui"
 	"github.com/go-go-golems/geppetto/cmd/pinocchio/cmds/tokens"
 	"github.com/go-go-golems/geppetto/pkg/cmds"
 	"github.com/go-go-golems/geppetto/pkg/doc"
@@ -18,6 +18,7 @@ import (
 	"github.com/go-go-golems/glazed/pkg/helpers/cast"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	_ "net/http/pprof"
 	"os"
 )
 
@@ -36,6 +37,10 @@ var rootCmd = &cobra.Command{
 }
 
 func main() {
+	//go func() {
+	//	log.Println(http.ListenAndServe("localhost:6060", nil))
+	//}()
+
 	// first, check if the args are "run-command file.yaml",
 	// because we need to load the file and then run the command itself.
 	// we need to do this before cobra, because we don't know which flags to load yet
@@ -145,9 +150,17 @@ func initAllCommands(helpSystem *help.HelpSystem) error {
 
 	rootCmd.AddCommand(openai.OpenaiCmd)
 
-	tokens.RegisterCommands(rootCmd)
+	serveCommand, err := cmds2.NewServeCommand(repositories)
+	if err != nil {
+		return err
+	}
+	cobraServeCommand, err := cli.BuildCobraCommandFromBareCommand(serveCommand)
+	if err != nil {
+		return err
+	}
+	rootCmd.AddCommand(cobraServeCommand)
 
-	rootCmd.AddCommand(ui.UiCmd)
+	tokens.RegisterCommands(rootCmd)
 
 	kagiCmd := kagi.RegisterKagiCommands()
 	rootCmd.AddCommand(kagiCmd)

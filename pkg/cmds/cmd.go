@@ -12,10 +12,10 @@ import (
 	glazedcmds "github.com/go-go-golems/glazed/pkg/cmds"
 	"github.com/go-go-golems/glazed/pkg/cmds/layers"
 	"github.com/go-go-golems/glazed/pkg/cmds/parameters"
+	"github.com/go-go-golems/glazed/pkg/helpers/cast"
 	"github.com/go-go-golems/glazed/pkg/helpers/templating"
 	"github.com/mattn/go-isatty"
 	"github.com/pkg/errors"
-	"github.com/rs/zerolog/log"
 	"github.com/tcnksm/go-input"
 	"io"
 	"os"
@@ -37,7 +37,7 @@ type GeppettoCommandDescription struct {
 }
 
 func NewHelpersParameterLayer() (layers.ParameterLayer, error) {
-	return layers.NewParameterLayer("helpers", "Geppetto helpers",
+	return layers.NewParameterLayer("geppetto", "Geppetto helpers",
 		layers.WithFlags(
 			parameters.NewParameterDefinition(
 				"print-prompt",
@@ -70,6 +70,12 @@ func NewHelpersParameterLayer() (layers.ParameterLayer, error) {
 				"interactive",
 				parameters.ParameterTypeBool,
 				parameters.WithHelp("Always enter interactive mode, even with non-tty stdout"),
+				parameters.WithDefault(false),
+			),
+			parameters.NewParameterDefinition(
+				"skip-chat",
+				parameters.ParameterTypeBool,
+				parameters.WithHelp("Skip chat mode"),
 				parameters.WithDefault(false),
 			),
 		),
@@ -161,6 +167,7 @@ func (g *GeppettoCommand) RunIntoWriter(
 
 	contextManager := geppetto_context.NewManager()
 
+	// TODO(manuel, 2023-10-15) These ps[""] all come from the geppetto layer, and that is not populated when doing parka
 	// load and render the system prompt
 	systemPrompt_, ok := ps["system"].(string)
 	if ok && systemPrompt_ != "" {
@@ -256,13 +263,6 @@ func (g *GeppettoCommand) RunIntoWriter(
 
 	m := steps.Bind[[]*geppetto_context.Message, string](ctx, messagesM, chatStep)
 
-	chatAILayer, ok := parsedLayers["ai-chat"]
-	if !ok {
-		return errors.Errorf("No ai layer")
-	}
-	isStream := chatAILayer.Parameters["ai-stream"].(bool)
-	log.Debug().Bool("isStream", isStream).Msg("")
-
 	accumulate, err := g.readStepResults(ctx, m, w)
 	if err != nil {
 		return err
@@ -273,11 +273,16 @@ func (g *GeppettoCommand) RunIntoWriter(
 		Text: accumulate,
 	})
 
-	// check if terminal is tty
+	skipChat, _, _ := cast.GetAndCast(ps, "skip-chat", false)
+	skipChat = true
+	if skipChat {
+		return nil
+	}
 
+	// check if terminal is tty
 	isOutputTerminal := isatty.IsTerminal(os.Stdout.Fd())
-	interactive := ps["interactive"].(bool)
-	continueInChat := ps["chat"].(bool)
+	interactive, _, _ := cast.GetAndCast(ps, "interactive", false)
+	continueInChat, _, _ := cast.GetAndCast(ps, "chat", false)
 	askChat := (isOutputTerminal || interactive) && !continueInChat
 
 	if askChat {

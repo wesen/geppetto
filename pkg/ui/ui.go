@@ -73,6 +73,7 @@ func InitialModel(manager *context.Manager, step chat.Step) model {
 
 	ret.textArea = textarea.New()
 	ret.textArea.Placeholder = "Once upon a time..."
+	ret.textArea.CharLimit = 8000
 	ret.textArea.Focus()
 	ret.focused = true
 

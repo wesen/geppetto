@@ -11,7 +11,7 @@ factories:
     stream: true
 flags:
   - name: code
-    type: stringFromFiles
+    type: fileList
     help: Code to generate unit tests for
     required: true
   - name: language
@@ -44,9 +44,9 @@ flags:
     help: Additional system prompt
     default: ""
   - name: additional
-    type: string
+    type: stringList
     help: Additional prompt
-    default: ""
+    default: []
   - name: context
     type: stringFromFiles
     help: Additional context from files
@@ -76,23 +76,29 @@ prompt: |
   Here is the code:
   
   ```
-  {{ .code }}
+  {{ range .code }}
+  Path: {{ .Path }}
+  ---
+  {{ .Content }}
+  ---
+  {{- end }}
   ```
   
   {{ if .framework }}Use {{ .framework }} framework for generating unit tests.{{end}}
-  {{ if .table_driven }}Use table driven tests.{{end}}
+  {{ if .table_driven }}Use table driven tests. Create a common datastructure for the table that can be reused by multiple tests.{{end}}
   {{ if .with_signature }}
   After listing the unit tests, write the signature (not the test itself) of the function that would implement the tests.
   {{- end }}
   {{ if (or .with_implementation .only_code)  -}}
-  Please provide the implementation for each test.
+  Please provide the implementation for each test. Before each test, write a short one sentence docstring that explains what the test is about,
+  and how it goes about testing it.
   {{ if .with_comments }}
   Write a short comment before each test describing the purpose of the test, if not obvious from the test name.
   Don't write obvious comments that just repeat the test name.
   {{- end }}
   {{- end }}
   
-  {{- .additional }}
+  {{- .additional | join "\n" }}
   {{ if .context -}}
   {{ .context }}
   {{- end }}
