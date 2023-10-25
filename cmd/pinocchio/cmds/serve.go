@@ -13,7 +13,7 @@ import (
 	"github.com/go-go-golems/glazed/pkg/cmds/loaders"
 	"github.com/go-go-golems/glazed/pkg/cmds/parameters"
 	"github.com/go-go-golems/glazed/pkg/helpers"
-	"github.com/go-go-golems/parka/pkg/glazed/handlers/datatables"
+	"github.com/go-go-golems/parka/pkg/glazed/handlers/writer"
 	"github.com/go-go-golems/parka/pkg/handlers"
 	command_dir "github.com/go-go-golems/parka/pkg/handlers/command-dir"
 	"github.com/go-go-golems/parka/pkg/handlers/config"
@@ -84,7 +84,7 @@ func (s *ServeCommand) runWithConfigFile(
 		commandDirHandlerOptions,
 		command_dir.WithOverridesAndDefaultsOptions(overrideAndDefaultsOptions...),
 		command_dir.WithTemplateLookup(templateLookup),
-		command_dir.WithDefaultTemplateName("chat.tmpl.html"),
+		command_dir.WithDefaultTemplateName("writer.tmpl.html"),
 		command_dir.WithDefaultIndexTemplateName("index.tmpl.html"),
 		command_dir.WithDevMode(devMode),
 	)
@@ -239,11 +239,12 @@ func (s *ServeCommand) Run(
 
 	// commandDirHandlerOptions will apply to all command dirs loaded by the server
 	commandDirHandlerOptions := []command_dir.CommandDirHandlerOption{
-		command_dir.WithTemplateLookup(datatables.NewDataTablesLookupTemplate()),
+		// TODO(manuel, 2023-10-17) Passing a single template lookup to the entire dir might be a bit weird, since we have datatables.tmpl.html and writer templates
+		command_dir.WithTemplateLookup(writer.NewLookupTemplate()),
 		command_dir.WithOverridesAndDefaultsOptions(
 			overrideAndDefaultOptions...,
 		),
-		command_dir.WithDefaultTemplateName("chat.tmpl.html"),
+		command_dir.WithDefaultTemplateName("writer.tmpl.html"),
 		command_dir.WithDefaultIndexTemplateName(""),
 		command_dir.WithDevMode(dev),
 	}
