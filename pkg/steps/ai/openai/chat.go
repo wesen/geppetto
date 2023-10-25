@@ -75,7 +75,7 @@ func (csf *Step) Start(
 	if chatSettings.TopP != nil {
 		topP = *chatSettings.TopP
 	}
-	maxTokens := 32
+	maxTokens := 0
 	if chatSettings.MaxResponseTokens != nil {
 		maxTokens = *chatSettings.MaxResponseTokens
 	}

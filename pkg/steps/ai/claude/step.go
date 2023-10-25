@@ -67,7 +67,7 @@ func (csf *Step) Start(
 	}
 	prompt += "\n\nAssistant: "
 
-	maxTokens := 32
+	maxTokens := 512
 	if chatSettings.MaxResponseTokens != nil {
 		maxTokens = *chatSettings.MaxResponseTokens
 	}

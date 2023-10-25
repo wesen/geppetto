@@ -13,7 +13,6 @@ flags:
   - name: ai-max-response-tokens
     type: int
     help: AI chat completion max response tokens
-    default: 512
   - name: ai-stream
     type: bool
     help: AI chat completion stream
