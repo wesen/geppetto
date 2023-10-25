@@ -1,14 +1,14 @@
 package kagi
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/charmbracelet/glamour"
 	"github.com/go-go-golems/glazed/pkg/cmds"
 	"github.com/go-go-golems/glazed/pkg/cmds/layers"
 	"github.com/go-go-golems/glazed/pkg/cmds/parameters"
+	"github.com/go-go-golems/glazed/pkg/help"
+	"github.com/go-go-golems/glazed/pkg/helpers/cast"
 	"github.com/go-go-golems/glazed/pkg/middlewares"
 	"github.com/go-go-golems/glazed/pkg/settings"
 	"github.com/go-go-golems/glazed/pkg/types"
@@ -17,6 +17,8 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
+	"strings"
 	"text/template"
 )
 
@@ -42,7 +44,7 @@ type EnrichWebResponse struct {
 	Data []SearchObject `json:"data"`
 }
 
-func RenderMarkdown(searchObjects []SearchObject) (string, error) {
+func RenderMarkdown(searchObjects []SearchObject, raw bool) (string, error) {
 	// Define a Go template for the markdown representation
 	const mdTemplate = `
 {{- range . }}
@@ -62,16 +64,18 @@ func RenderMarkdown(searchObjects []SearchObject) (string, error) {
 		return "", err
 	}
 
-	var buffer bytes.Buffer
-	err = tmpl.Execute(&buffer, searchObjects)
-	if err != nil {
-		return "", err
+	if raw {
+		var sb strings.Builder
+		err := tmpl.Execute(&sb, searchObjects)
+		if err != nil {
+			return "", err
+		}
+		return sb.String(), nil
 	}
 
-	// Convert the generated markdown into a styled string using glamour
-	styled, err := glamour.Render(buffer.String(), "dark")
+	styled, err := help.RenderToMarkdown(tmpl, searchObjects, os.Stdout)
 	if err != nil {
-		return "", err
+		return "", errors.Wrap(err, "failed to render markdown")
 	}
 
 	return styled, nil
@@ -115,6 +119,12 @@ func NewEnrichWebCommand() (*EnrichWebCommand, error) {
 					"news",
 					parameters.ParameterTypeBool,
 					parameters.WithHelp("Search news"),
+					parameters.WithDefault(false),
+				),
+				parameters.NewParameterDefinition(
+					"raw",
+					parameters.ParameterTypeBool,
+					parameters.WithHelp("Whether to return raw markdown output (not glamour rendered)"),
 					parameters.WithDefault(false),
 				),
 			),
@@ -181,9 +191,10 @@ func (c *EnrichWebCommand) Run(
 	}
 	response.Data = response.Data[:limit]
 
-	markdown := ps["markdown"].(bool)
+	markdown, _, _ := cast.GetAndCast(ps, "markdown", false)
+	raw, _, _ := cast.GetAndCast(ps, "raw", false)
 	if markdown {
-		styled, err := RenderMarkdown(response.Data)
+		styled, err := RenderMarkdown(response.Data, raw)
 		if err != nil {
 			return err
 		}

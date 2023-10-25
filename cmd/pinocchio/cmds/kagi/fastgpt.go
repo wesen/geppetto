@@ -5,15 +5,18 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/charmbracelet/glamour"
 	"github.com/go-go-golems/glazed/pkg/cmds"
 	"github.com/go-go-golems/glazed/pkg/cmds/layers"
 	"github.com/go-go-golems/glazed/pkg/cmds/parameters"
+	"github.com/go-go-golems/glazed/pkg/help"
+	"github.com/go-go-golems/glazed/pkg/helpers/cast"
 	"github.com/go-go-golems/glazed/pkg/helpers/templating"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 	"io"
 	"net/http"
+	"os"
+	"strings"
 )
 
 type FastGPTCommand struct {
@@ -47,7 +50,7 @@ type FastGPTRequest struct {
 	WebSearch bool   `json:"web_search"`
 }
 
-func RenderFastGPTAnswers(answer FastGPTAnswer, query string) (string, error) {
+func RenderFastGPTAnswers(answer FastGPTAnswer, query string, raw bool) (string, error) {
 	// Define a Go template for the markdown representation
 	const mdTemplate = `
 # Query: {{ .Query }}
@@ -83,17 +86,18 @@ func RenderFastGPTAnswers(answer FastGPTAnswer, query string) (string, error) {
 		Answer: answer,
 	}
 
-	var buffer bytes.Buffer
-	err = tmpl.Execute(&buffer, data)
-	if err != nil {
-		return "", err
+	if raw {
+		var sb strings.Builder
+		err := tmpl.Execute(&sb, data)
+		if err != nil {
+			return "", err
+		}
+		return sb.String(), nil
 	}
 
-	// Convert the generated markdown into a styled string using glamour
-	// Assuming you have the glamour library imported and set up properly
-	styled, err := glamour.Render(buffer.String(), "dark")
+	styled, err := help.RenderToMarkdown(tmpl, data, os.Stdout)
 	if err != nil {
-		return "", err
+		return "", errors.Wrap(err, "failed to render markdown")
 	}
 
 	return styled, nil
@@ -116,6 +120,12 @@ func NewFastGPTCommand() (*FastGPTCommand, error) {
 					parameters.ParameterTypeBool,
 					parameters.WithHelp("Whether to use web search"),
 					parameters.WithDefault(true),
+				),
+				parameters.NewParameterDefinition(
+					"raw",
+					parameters.ParameterTypeBool,
+					parameters.WithHelp("Whether to return raw markdown output (not glamour rendered)"),
+					parameters.WithDefault(false),
 				),
 			),
 			cmds.WithArguments(
@@ -151,6 +161,7 @@ func (c *FastGPTCommand) RunIntoWriter(
 	if webSearch, ok := ps["web_search"]; ok {
 		reqData.WebSearch = webSearch.(bool)
 	}
+	raw, _, _ := cast.GetAndCast(ps, "raw", false)
 
 	bodyData, err := json.Marshal(reqData)
 	if err != nil {
@@ -187,7 +198,7 @@ func (c *FastGPTCommand) RunIntoWriter(
 		return errors.Wrap(err, "failed to parse response body")
 	}
 
-	styled, err := RenderFastGPTAnswers(response.Data, reqData.Query)
+	styled, err := RenderFastGPTAnswers(response.Data, reqData.Query, raw)
 	if err != nil {
 		return err
 	}
