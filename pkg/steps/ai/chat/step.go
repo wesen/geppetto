@@ -35,7 +35,7 @@ func (s *StandardStepFactory) NewStepFromLayers(layers map[string]*layers.Parsed
 	}
 
 	if openai.IsOpenAiEngine(*settings_.Chat.Engine) {
-		return &openai.Step{
+		return &openai.ChatStep{
 			Settings: settings_,
 		}, nil
 	}

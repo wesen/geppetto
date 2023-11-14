@@ -48,6 +48,9 @@ prompt: |
   4. **Unique Insights**: Highlight any unique insights or perspectives that add value to the discussion. {{ if .usernames }}Include the username of the commenter, if available.{{end}}
   If possible, quote the comments that are related to the insight using markdown syntax.
   
+  5. **Other opinions**: Finally, What are other opinions expressed in the thread? Can you group different opinions together that are similar? Make a bullet point list as well. Be exhaustive.
+  
+  Don't repeat information that might already be provided in previous sections (such as rehashing a thread summary in the interesting arguments section).
   
   Remember, the goal is to surface the most interesting and informative comments, and to present a balanced and concise summary of the discussion.
 

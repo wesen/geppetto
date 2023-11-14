@@ -3,7 +3,7 @@ package openai
 import (
 	"context"
 	"fmt"
-	openai3 "github.com/go-go-golems/geppetto/pkg/steps/ai/openai"
+	openai3 "github.com/go-go-golems/geppetto/pkg/openai"
 	openai2 "github.com/go-go-golems/geppetto/pkg/steps/ai/settings/openai"
 	"github.com/go-go-golems/glazed/pkg/cmds"
 	"github.com/go-go-golems/glazed/pkg/cmds/layers"

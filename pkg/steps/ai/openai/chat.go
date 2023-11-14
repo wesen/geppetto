@@ -12,7 +12,7 @@ import (
 	"strings"
 )
 
-type Step struct {
+type ChatStep struct {
 	Settings *settings.StepSettings
 }
 
@@ -27,11 +27,11 @@ func IsOpenAiEngine(engine string) bool {
 	return false
 }
 
-func (csf *Step) SetStreaming(b bool) {
+func (csf *ChatStep) SetStreaming(b bool) {
 	csf.Settings.Chat.Stream = b
 }
 
-func (csf *Step) Start(
+func (csf *ChatStep) Start(
 	ctx context.Context,
 	messages []*geppetto_context.Message,
 ) (*steps.StepResult[string], error) {
@@ -155,6 +155,6 @@ func (csf *Step) Start(
 }
 
 // Close is only called after the returned monad has been entirely consumed
-func (csf *Step) Close(ctx context.Context) error {
+func (csf *ChatStep) Close(ctx context.Context) error {
 	return nil
 }
