@@ -7,6 +7,7 @@ const (
 	ApiTypeAnyScale  ApiType = "anyscale"
 	ApiTypeFireworks ApiType = "fireworks"
 	ApiTypeClaude    ApiType = "claude"
+	ApiTypeGenai     ApiType = "genai"
 	// not implemented from here on down
 	ApiTypeOllama     ApiType = "ollama"
 	ApiTypeMistral    ApiType = "mistral"

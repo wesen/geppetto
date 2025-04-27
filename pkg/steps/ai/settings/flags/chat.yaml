@@ -13,6 +13,7 @@ flags:
       - "anyscale"
       - "fireworks"
       - "claude"
+      - "genai"
       - "ollama"
       - "mistral"
       - "perplexity"
@@ -50,7 +51,7 @@ flags:
   - name: ai-cache-max-size
     type: int
     help: Maximum size of cache in bytes (for disk cache)
-    default: 1073741824  # 1GB
+    default: 1073741824 # 1GB
   - name: ai-cache-max-entries
     type: int
     help: Maximum number of entries in cache (for memory cache)
