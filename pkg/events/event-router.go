@@ -20,10 +20,17 @@ import (
 type ChatEventHandler interface {
 	HandlePartialCompletion(ctx context.Context, e *EventPartialCompletion) error
 	HandleText(ctx context.Context, e *EventText) error
+	HandleStart(ctx context.Context, e *EventPartialCompletionStart) error
 	HandleFinal(ctx context.Context, e *EventFinal) error
+	HandleToolCall(ctx context.Context, e *EventToolCall) error
+	HandleToolResult(ctx context.Context, e *EventToolResult) error
 	HandleError(ctx context.Context, e *EventError) error
 	HandleInterrupt(ctx context.Context, e *EventInterrupt) error
-	// Add other event types as needed
+
+	// Add new handlers for reasoning/thinking:
+	HandleThinkingDelta(ctx context.Context, e *EventThinkingDelta) error
+	HandleReasoningSummary(ctx context.Context, e *EventReasoningSummary) error
+	// Optional: HandleSignatureDelta(ctx context.Context, e *EventSignatureDelta) error
 }
 
 type EventRouter struct {
@@ -170,16 +177,26 @@ func createChatDispatchHandler(handler ChatEventHandler) message.NoPublishHandle
 		msgCtx := msg.Context()
 		var handlerErr error
 		switch ev := e.(type) {
+		case *EventPartialCompletionStart:
+			handlerErr = handler.HandleStart(msgCtx, ev)
 		case *EventPartialCompletion:
 			handlerErr = handler.HandlePartialCompletion(msgCtx, ev)
 		case *EventText:
 			handlerErr = handler.HandleText(msgCtx, ev)
 		case *EventFinal:
 			handlerErr = handler.HandleFinal(msgCtx, ev)
+		case *EventToolCall:
+			handlerErr = handler.HandleToolCall(msgCtx, ev)
+		case *EventToolResult:
+			handlerErr = handler.HandleToolResult(msgCtx, ev)
 		case *EventError:
 			handlerErr = handler.HandleError(msgCtx, ev)
 		case *EventInterrupt:
 			handlerErr = handler.HandleInterrupt(msgCtx, ev)
+		case *EventThinkingDelta:
+			handlerErr = handler.HandleThinkingDelta(msgCtx, ev)
+		case *EventReasoningSummary:
+			handlerErr = handler.HandleReasoningSummary(msgCtx, ev)
 		default:
 			log.Warn().Interface("logFields", logFields).Msg("Unhandled chat event type")
 			// Decide if unknown types should be an error or ignored

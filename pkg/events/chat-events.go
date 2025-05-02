@@ -25,6 +25,11 @@ const (
 	EventTypeToolResult EventType = "tool-result"
 	EventTypeError      EventType = "error"
 	EventTypeInterrupt  EventType = "interrupt"
+
+	// New types for reasoning/thinking:
+	EventTypeReasoningSummary EventType = "reasoning-summary" // OpenAI: Final summary
+	EventTypeThinkingDelta    EventType = "thinking-delta"    // Claude / OpenAI: Streamed thought chunk
+	EventTypeSignatureDelta   EventType = "signature-delta"   // Claude: Optional signature
 )
 
 type Event interface {
@@ -285,97 +290,124 @@ func (em EventMetadata) MarshalZerologObject(e *zerolog.Event) {
 	}
 }
 
-func NewEventFromJson(b []byte) (Event, error) {
-	var e *EventImpl
-	err := json.Unmarshal(b, &e)
-	if err != nil {
-		return nil, err
-	}
-
-	e.payload = b
-
-	switch e.Type_ {
-	case EventTypeStart:
-		ret, ok := ToTypedEvent[EventPartialCompletionStart](e)
-		if !ok {
-			return nil, fmt.Errorf("could not cast event to EventPartialCompletionStart")
-		}
-		return ret, nil
-	case EventTypePartialCompletion:
-		ret, ok := ToTypedEvent[EventPartialCompletion](e)
-		if !ok {
-			return nil, fmt.Errorf("could not cast event to EventPartialCompletion")
-		}
-		return ret, nil
-	case EventTypeToolCall:
-		ret, ok := ToTypedEvent[EventToolCall](e)
-		if !ok {
-			return nil, fmt.Errorf("could not cast event to EventToolCall")
-		}
-		return ret, nil
-	case EventTypeToolResult:
-		ret, ok := ToTypedEvent[EventToolResult](e)
-		if !ok {
-			return nil, fmt.Errorf("could not cast event to EventToolResult")
-		}
-		return ret, nil
-	case EventTypeError:
-		ret, ok := ToTypedEvent[EventError](e)
-		if !ok {
-			return nil, fmt.Errorf("could not cast event to EventError")
-		}
-		return ret, nil
-	case EventTypeInterrupt:
-		ret, ok := ToTypedEvent[EventInterrupt](e)
-		if !ok {
-			return nil, fmt.Errorf("could not cast event to EventInterrupt")
-		}
-		return ret, nil
-	case EventTypeFinal:
-		ret, ok := ToTypedEvent[EventFinal](e)
-		if !ok {
-			return nil, fmt.Errorf("could not cast event to EventFinal")
-		}
-		return ret, nil
-
-	case EventTypeStatus:
-	}
-
-	return e, nil
-}
-
-func ToTypedEvent[T any](e Event) (*T, bool) {
-	var ret *T
-	err := json.Unmarshal(e.Payload(), &ret)
-	if err != nil {
+func (e *EventImpl) ToReasoningSummary() (*EventReasoningSummary, bool) {
+	if e.Type() != EventTypeReasoningSummary {
 		return nil, false
 	}
-
-	return ret, true
+	var typedEvent EventReasoningSummary
+	if err := json.Unmarshal(e.payload, &typedEvent); err != nil {
+		// Handle error appropriately, maybe log it
+		return nil, false
+	}
+	typedEvent.EventImpl = *e // Restore base fields
+	return &typedEvent, true
 }
 
-func (e *EventImpl) ToText() (EventText, bool) {
-	ret, ok := ToTypedEvent[EventText](e)
-	if !ok || ret == nil {
-		return EventText{}, false
+func (e *EventImpl) ToThinkingDelta() (*EventThinkingDelta, bool) {
+	if e.Type() != EventTypeThinkingDelta {
+		return nil, false
 	}
-	return *ret, true
+	var typedEvent EventThinkingDelta
+	if err := json.Unmarshal(e.payload, &typedEvent); err != nil {
+		return nil, false
+	}
+	typedEvent.EventImpl = *e // Restore base fields
+	return &typedEvent, true
 }
 
-func (e *EventImpl) ToPartialCompletion() (EventPartialCompletion, bool) {
-	ret, ok := ToTypedEvent[EventPartialCompletion](e)
-	if !ok || ret == nil {
-		return EventPartialCompletion{}, false
+func (e *EventImpl) ToSignatureDelta() (*EventSignatureDelta, bool) {
+	if e.Type() != EventTypeSignatureDelta {
+		return nil, false
 	}
-	return *ret, true
+	var typedEvent EventSignatureDelta
+	if err := json.Unmarshal(e.payload, &typedEvent); err != nil {
+		return nil, false
+	}
+	typedEvent.EventImpl = *e // Restore base fields
+	return &typedEvent, true
 }
 
-func (e *EventImpl) ToToolCall() (EventToolCall, bool) {
-	ret, ok := ToTypedEvent[EventToolCall](e)
-	if !ok || ret == nil {
-		return EventToolCall{}, false
+func NewEventFromJson(b []byte) (Event, error) {
+	var base EventImpl
+	if err := json.Unmarshal(b, &base); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal base event: %w", err)
 	}
-	return *ret, true
+	base.payload = b // Store raw payload
+
+	switch base.Type() {
+	case EventTypeStart:
+		var typedEvent EventPartialCompletionStart
+		if err := json.Unmarshal(base.Payload(), &typedEvent); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal EventPartialCompletionStart: %w", err)
+		}
+		typedEvent.EventImpl = base
+		return &typedEvent, nil
+	case EventTypeFinal:
+		var typedEvent EventFinal
+		if err := json.Unmarshal(base.Payload(), &typedEvent); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal EventFinal: %w", err)
+		}
+		typedEvent.EventImpl = base
+		return &typedEvent, nil
+	case EventTypePartialCompletion:
+		var typedEvent EventPartialCompletion
+		if err := json.Unmarshal(base.Payload(), &typedEvent); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal EventPartialCompletion: %w", err)
+		}
+		typedEvent.EventImpl = base
+		return &typedEvent, nil
+	case EventTypeToolCall:
+		var typedEvent EventToolCall
+		if err := json.Unmarshal(base.Payload(), &typedEvent); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal EventToolCall: %w", err)
+		}
+		typedEvent.EventImpl = base
+		return &typedEvent, nil
+	case EventTypeToolResult:
+		var typedEvent EventToolResult
+		if err := json.Unmarshal(base.Payload(), &typedEvent); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal EventToolResult: %w", err)
+		}
+		typedEvent.EventImpl = base
+		return &typedEvent, nil
+	case EventTypeError:
+		var typedEvent EventError
+		if err := json.Unmarshal(base.Payload(), &typedEvent); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal EventError: %w", err)
+		}
+		typedEvent.EventImpl = base
+		return &typedEvent, nil
+	case EventTypeInterrupt:
+		var typedEvent EventInterrupt
+		if err := json.Unmarshal(base.Payload(), &typedEvent); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal EventInterrupt: %w", err)
+		}
+		typedEvent.EventImpl = base
+		return &typedEvent, nil
+
+	case EventTypeReasoningSummary:
+		if typedEvent, ok := base.ToReasoningSummary(); ok {
+			return typedEvent, nil
+		}
+		return nil, fmt.Errorf("failed to cast to EventReasoningSummary")
+	case EventTypeThinkingDelta:
+		if typedEvent, ok := base.ToThinkingDelta(); ok {
+			return typedEvent, nil
+		}
+		return nil, fmt.Errorf("failed to cast to EventThinkingDelta")
+	case EventTypeSignatureDelta:
+		if typedEvent, ok := base.ToSignatureDelta(); ok {
+			return typedEvent, nil
+		}
+		return nil, fmt.Errorf("failed to cast to EventSignatureDelta")
+
+	case EventTypeStatus:
+		// TODO(manuel, 2024-07-19) Define payload and handler for EventTypeStatus if needed
+		return nil, fmt.Errorf("unhandled event type: %s", base.Type())
+
+	default:
+		return nil, fmt.Errorf("unknown event type: %s", base.Type())
+	}
 }
 
 func (e EventPartialCompletionStart) MarshalZerologObject(ev *zerolog.Event) {
@@ -424,3 +456,69 @@ func (e EventPartialCompletion) MarshalZerologObject(ev *zerolog.Event) {
 	e.EventImpl.MarshalZerologObject(ev)
 	ev.Str("delta", e.Delta).Str("completion", e.Completion)
 }
+
+// EventReasoningSummary carries the final reasoning summary from OpenAI.
+type EventReasoningSummary struct {
+	EventImpl
+	Summary string `json:"summary"`
+}
+
+// NewReasoningSummaryEvent creates a new EventReasoningSummary.
+func NewReasoningSummaryEvent(md EventMetadata, step *steps.StepMetadata, s string) *EventReasoningSummary {
+	return &EventReasoningSummary{
+		EventImpl: EventImpl{
+			Type_:     EventTypeReasoningSummary,
+			Metadata_: md,
+			Step_:     step,
+			payload:   nil,
+		},
+		Summary: s,
+	}
+}
+
+var _ Event = &EventReasoningSummary{}
+
+// EventThinkingDelta carries a chunk of streamed thought process (e.g., from Claude or OpenAI Reasoning).
+// Mimics EventPartialCompletion structure for UI consistency.
+type EventThinkingDelta struct {
+	EventImpl
+	Delta string `json:"delta"`       // The new chunk of text
+	Full  string `json:"full_so_far"` // Accumulated thought text so far
+}
+
+// NewThinkingDeltaEvent creates a new EventThinkingDelta.
+func NewThinkingDeltaEvent(md EventMetadata, step *steps.StepMetadata, delta string, full string) *EventThinkingDelta {
+	return &EventThinkingDelta{
+		EventImpl: EventImpl{
+			Type_:     EventTypeThinkingDelta,
+			Metadata_: md,
+			Step_:     step,
+			payload:   nil,
+		},
+		Delta: delta,
+		Full:  full,
+	}
+}
+
+var _ Event = &EventThinkingDelta{}
+
+// EventSignatureDelta carries the optional signature from Claude.
+type EventSignatureDelta struct {
+	EventImpl
+	// Add signature fields if needed, e.g., Signature string `json:"signature,omitempty"`
+}
+
+// NewSignatureDeltaEvent creates a new EventSignatureDelta.
+func NewSignatureDeltaEvent(md EventMetadata, step *steps.StepMetadata /*, signature string */) *EventSignatureDelta {
+	return &EventSignatureDelta{
+		EventImpl: EventImpl{
+			Type_:     EventTypeSignatureDelta,
+			Metadata_: md,
+			Step_:     step,
+			payload:   nil,
+		},
+		// Signature: signature,
+	}
+}
+
+var _ Event = &EventSignatureDelta{}

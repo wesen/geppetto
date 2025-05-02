@@ -30,6 +30,8 @@ type StreamingDeltaType string
 const (
 	TextDeltaType      StreamingDeltaType = "text_delta"
 	InputJSONDeltaType StreamingDeltaType = "input_json_delta"
+	ThinkingDeltaType  StreamingDeltaType = "thinking_delta"
+	SignatureDeltaType StreamingDeltaType = "signature_delta"
 )
 
 type StreamingEvent struct {
@@ -37,7 +39,7 @@ type StreamingEvent struct {
 	Message      *MessageResponse   `json:"message,omitempty"`
 	Delta        *Delta             `json:"delta,omitempty"`
 	Error        *Error             `json:"error,omitempty"`
-	Index        int                `json:"index,omitempty"`
+	Index        int                `json:"index"`
 	Usage        *Usage             `json:"usage,omitempty"`
 	ContentBlock *ContentBlock      `json:"content_block,omitempty"`
 }
@@ -57,9 +59,7 @@ func (s StreamingEvent) MarshalZerologObject(e *zerolog.Event) {
 		e.Object("error", s.Error)
 	}
 
-	if s.Index != 0 {
-		e.Int("index", s.Index)
-	}
+	e.Int("index", s.Index)
 
 	if s.Usage != nil {
 		e.Object("usage", s.Usage)
@@ -73,11 +73,14 @@ func (s StreamingEvent) MarshalZerologObject(e *zerolog.Event) {
 var _ zerolog.LogObjectMarshaler = StreamingEvent{}
 
 type ContentBlock struct {
-	Type  ContentType `json:"type"`
-	ID    string      `json:"id,omitempty"`
-	Name  string      `json:"name,omitempty"`
-	Input string      `json:"input,omitempty"`
-	Text  string      `json:"text,omitempty"`
+	Type      ContentType `json:"type"`
+	ID        string      `json:"id,omitempty"`
+	Name      string      `json:"name,omitempty"`
+	Input     string      `json:"input,omitempty"`
+	Text      string      `json:"text,omitempty"`
+	Thinking  string      `json:"thinking,omitempty"`
+	Signature string      `json:"signature,omitempty"`
+	Data      string      `json:"data,omitempty"`
 }
 
 type Error struct {
@@ -88,7 +91,9 @@ type Error struct {
 type Delta struct {
 	Type         StreamingDeltaType `json:"type"`
 	Text         string             `json:"text,omitempty"`
-	PartialJSON  string             `json:"partial_json"`
+	Thinking     string             `json:"thinking,omitempty"`
+	Signature    string             `json:"signature,omitempty"`
+	PartialJSON  string             `json:"partial_json,omitempty"`
 	StopReason   string             `json:"stop_reason,omitempty"`
 	StopSequence string             `json:"stop_sequence,omitempty"`
 }
@@ -107,6 +112,15 @@ func (cb ContentBlock) MarshalZerologObject(e *zerolog.Event) {
 	if cb.Text != "" {
 		e.Str("text", cb.Text)
 	}
+	if cb.Thinking != "" {
+		e.Str("thinking", cb.Thinking)
+	}
+	if cb.Signature != "" {
+		e.Str("signature", "[omitted]")
+	}
+	if cb.Data != "" {
+		e.Str("data", "[omitted]")
+	}
 }
 
 func (err Error) MarshalZerologObject(e *zerolog.Event) {
@@ -119,7 +133,15 @@ func (d Delta) MarshalZerologObject(e *zerolog.Event) {
 	if d.Text != "" {
 		e.Str("text", d.Text)
 	}
-	e.Str("partial_json", d.PartialJSON)
+	if d.Thinking != "" {
+		e.Str("thinking", d.Thinking)
+	}
+	if d.Signature != "" {
+		e.Str("signature", "[omitted]")
+	}
+	if d.PartialJSON != "" {
+		e.Str("partial_json", d.PartialJSON)
+	}
 	if d.StopReason != "" {
 		e.Str("stop_reason", d.StopReason)
 	}

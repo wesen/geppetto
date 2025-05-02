@@ -18,17 +18,24 @@ import (
 
 // MessageRequest represents the Messages API request payload.
 type MessageRequest struct {
-	Model         string    `json:"model"`
-	Messages      []Message `json:"messages"`
-	MaxTokens     int       `json:"max_tokens"`
-	Metadata      *Metadata `json:"metadata,omitempty"`
-	StopSequences []string  `json:"stop_sequences,omitempty"`
-	Stream        bool      `json:"stream"`
-	System        string    `json:"system,omitempty"`
-	Temperature   *float64  `json:"temperature,omitempty"`
-	Tools         []Tool    `json:"tools,omitempty"`
-	TopK          *int      `json:"top_k,omitempty"`
-	TopP          *float64  `json:"top_p,omitempty"`
+	Model         string                 `json:"model"`
+	Messages      []Message              `json:"messages"`
+	MaxTokens     int                    `json:"max_tokens"`
+	Metadata      *Metadata              `json:"metadata,omitempty"`
+	StopSequences []string               `json:"stop_sequences,omitempty"`
+	Stream        bool                   `json:"stream"`
+	System        string                 `json:"system,omitempty"`
+	Temperature   *float64               `json:"temperature,omitempty"`
+	Tools         []Tool                 `json:"tools,omitempty"`
+	TopK          *int                   `json:"top_k,omitempty"`
+	TopP          *float64               `json:"top_p,omitempty"`
+	Thinking      *ThinkingConfiguration `json:"thinking,omitempty"`
+}
+
+// ThinkingConfiguration specifies parameters for enabling Claude's extended thinking.
+type ThinkingConfiguration struct {
+	Type   string `json:"type"` // Should always be "enabled"
+	Budget int    `json:"budget_tokens"`
 }
 
 // Tool represents a tool that the model can use.
@@ -126,8 +133,23 @@ func (m MessageResponse) FullText() string {
 		case ToolResultContent:
 			res += "Tool Call Result: " + v.ToolUseID + "\n"
 			res += v.Content
+		case ThinkingContent:
+			// Ignore thinking content in the main text output
 		default:
 
+		}
+	}
+	return res
+}
+
+// FullReasoning returns the complete text accumulated from thinking_delta events,
+// as populated by the ContentBlockMerger during streaming.
+// It computes the value by iterating through the Content blocks.
+func (m *MessageResponse) FullReasoning() string {
+	res := ""
+	for _, c := range m.Content {
+		if thinkingContent, ok := c.(ThinkingContent); ok {
+			res += thinkingContent.Text
 		}
 	}
 	return res

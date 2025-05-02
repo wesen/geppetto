@@ -148,46 +148,13 @@ This roadmap breaks down the integration into manageable phases, covering both A
 
 #### 5.1.2 Claude Client Schema Patch
 
-*(Assuming an in-house client for Claude, as no official Go SDK exists yet)*
+*(Updated based on final implementation)*
 
-*   **[ ] Action:** Define Go structs mirroring the new `thinking` request parameter (if not already done as part of client implementation):
-    ```go
-    // In your Claude client package
-    // ThinkingCfg specifies the configuration for extended thinking mode.
-    type ThinkingCfg struct {
-        Type   string `json:"type"`             // Should be "enabled"
-        Budget int    `json:"budget_tokens"`    // Min 1024, <= max_tokens
-    }
-    ```
-*   **[ ] Action:** Add the new fields to the `claude.Settings` struct in `pkg/steps/ai/settings/claude/settings.go`:
-    ```go
-    // In geppetto/pkg/steps/ai/settings/claude/settings.go
-    type Settings struct {
-        // ... existing fields ...
-        EnableThinking bool    `yaml:"enable_thinking,omitempty" glazed.parameter:"claude-enable-thinking"`
-        ThinkingBudget *int    `yaml:"thinking_budget,omitempty" glazed.parameter:"claude-thinking-budget"`
-    }
-    // Update NewSettings to provide defaults (EnableThinking: false, ThinkingBudget: 4096)
-    ```
-*   **[ ] Action:** Define the corresponding flags in `pkg/steps/ai/settings/claude/claude.yaml`:
-    ```yaml
-    # In geppetto/pkg/steps/ai/settings/claude/claude.yaml (add to existing flags)
-    flags:
-      # ... existing flags ...
-      - name: claude-enable-thinking
-        type: bool
-        help: Enable Claude 3.7 extended thinking mode
-        default: false
-      - name: claude-thinking-budget
-        type: int
-        help: Token budget for Claude extended thinking (min 1024, requires --claude-enable-thinking)
-        default: 4096
-    ```
-*   **[ ] Action:** Modify the code that constructs the Claude API request:
-    *   Check if `settings.Claude.EnableThinking` is true.
-    *   If true, add the `thinking` object to the request JSON, using `settings.Claude.ThinkingBudget` for `budget_tokens`.
-    *   Add validation logic: ensure `*settings.Claude.ThinkingBudget >= 1024` and `*settings.Claude.ThinkingBudget <= max_tokens` *before* sending the request.
-*   **[ ] Action:** Implement logic to cache and resend the raw `thinking` or `redacted_thinking` blocks from previous assistant turns in multi-turn chats.
+*   [X] Action: Define Go structs mirroring the new `thinking` request parameter (`ThinkingConfiguration` in `api/messages.go`).
+*   [X] Action: Add the `EnableThinking` and `ThinkingBudget` fields to `claude.Settings` (`settings.go`) and define corresponding flags in `claude.yaml`.
+*   [X] Action: Modify the code constructing the Claude API request (`chat-step.go`) to add the `thinking` block based on settings, including validation.
+*   [X] Action: Implement logic to preserve thinking context in multi-turn chats (relying on standard message history inclusion via `makeMessageRequest`).
+*   [X] Action: Update API definitions (`api/content.go`, `api/streaming.go`) to correctly handle `thinking`, `thinking_delta`, `signature_delta`, and `redacted_thinking` types and payloads.
 
 ### 5.2 Phase 2: Geppetto Event Layer Upgrade (`pkg/events`)
 
@@ -376,52 +343,32 @@ This involves modifying the code that processes the streaming responses from the
 
 #### 5.3.1 OpenAI Stream Adapter
 
-*   **[ ] Action:** In the code handling the `go-openai` stream, check the final stream chunk for the `delta.ReasoningSummary` field. If present, publish an `EventReasoningSummary`:
+*   [X] Action: In the code handling the `go-openai` stream, check the final stream chunk for the `delta.ReasoningContent` field. If present, publish an `EventReasoningSummary`:
     ```go
     // Example within OpenAI stream processing loop
-    if streamResp.Choices[0].Delta.ReasoningSummary != "" {
+    if streamResp.Choices[0].Delta.ReasoningContent != "" { // NOTE: Assumed field name is ReasoningContent
         // publisher is your events.Publisher instance
         // md is the EventMetadata, step is the *steps.StepMetadata
-        evt := events.NewReasoningSummaryEvent(md, step, streamResp.Choices[0].Delta.ReasoningSummary)
+        evt := events.NewReasoningSummaryEvent(md, step, streamResp.Choices[0].Delta.ReasoningContent)
         if err := publisher.Publish(ctx, evt); err != nil {
              // Handle error
         }
-        // Optionally populate UsageInfo.ReasoningTokens from streamResp.Usage here
+        // Optionally populate UsageInfo.ReasoningTokens from streamResp.Usage here (Handled in metadata extraction)
     }
     ```
 
 #### 5.3.2 Claude Stream Adapter
 
-*   **[ ] Action:** Enhance the SSE scanner/parser for Claude streams. Add cases for the new event types (`thinking_delta`, `signature_delta`). Maintain an accumulator for the `Full` field of `EventThinkingDelta`.
-    ```go
-    // Example within Claude SSE processing loop
-    var accumulatedThinking string // Keep track per turn
-
-    switch eventType { // Determined from SSE event.Event field
-    case "thinking_delta":
-        var thinkingData struct { Text string `json:"text"` } // Adjust based on actual payload
-        _ = json.Unmarshal([]byte(eventData), &thinkingData) // eventData is SSE event.Data
-        accumulatedThinking += thinkingData.Text
-        evt := events.NewThinkingDeltaEvent(md, step, thinkingData.Text, accumulatedThinking)
-        if err := publisher.Publish(ctx, evt); err != nil { /* Handle error */ }
-
-    case "signature_delta":
-        // Optional: Parse signature, create and publish EventSignatureDelta if needed
-        // You might choose to simply ignore this event type if the signature isn't used.
-        // Reset accumulatedThinking *after* content_block_stop or message_stop? Verify API docs.
-
-    case "content_block_delta":
-        // Existing logic for partial completion
-        // Ensure accumulatedThinking is handled correctly across turns or reset appropriately
-
-    case "message_stop":
-         // Final event, ensure usage is captured correctly (output_tokens includes thinking)
-         accumulatedThinking = "" // Reset for next turn
-
-    // ... other cases like content_block_start, message_start, error ...
-    }
-    ```
-    **Gotcha:** Pay close attention to the exact event sequence (`thinking_delta` → `signature_delta` → `content_block_start` → `content_block_delta` → `content_block_stop` → `message_stop`) and manage the `accumulatedThinking` state correctly, especially around `content_block_stop` or `message_stop`.
+*   [X] Action: Enhance the Claude stream processing, primarily within `ContentBlockMerger` (`pkg/steps/ai/claude/content-block-merger.go`):
+    *   Correctly handle `ContentBlockDeltaType` events with `delta.Type` set to `ThinkingDeltaType` or `SignatureDeltaType`.
+    *   Accumulate thinking text chunks (`delta.Thinking`) into an internal `ContentBlock` at a dedicated index (`internalThinkingBlockIndex`).
+    *   Store the signature (`delta.Signature`) onto the internal thinking `ContentBlock`.
+    *   Publish `EventThinkingDelta` for each thinking chunk.
+    *   Handle `ContentBlockStartType` for `redacted_thinking` blocks.
+    *   Handle `ContentBlockStopType` for `thinking` (no-op as finalized in `MessageStopType`) and `redacted_thinking` (adds block to response).
+    *   Finalize and add the accumulated `ThinkingContent` (including signature) or `RedactedThinkingContent` blocks to `response.Content` during `ContentBlockStopType` or `MessageStopType`.
+    *   Correctly accumulate `Usage` information, especially output tokens.
+    *   Refine event emission (`PartialCompletionEvent`, `FinalEvent`) to use the finalized content representation (`getFinalizedText()`).
 
 ### 5.4 Phase 4: Testing and Validation
 
@@ -430,11 +377,14 @@ This involves modifying the code that processes the streaming responses from the
     *   `NewEventFromJson` correctly identifying and parsing new types.
     *   Router dispatching new event types to the correct (mock) handlers.
     *   Printer output correctness for new event types (snapshot testing).
-    *   Claude SSE parser correctly generating `ThinkingDelta` events from mock SSE streams.
-    *   Claude request builder validation (budget checks, model compatibility).
+*   [X] Action: Update Claude `ContentBlockMerger` unit tests (`content-block-merger_test.go`) to cover:
+    *   Handling of `thinking_delta` and `signature_delta` events.
+    *   Handling of `redacted_thinking` blocks.
+    *   Correct usage accumulation.
+    *   Correct final response content structure.
 *   **[ ] Action:** Write integration tests:
     *   OpenAI call successfully emitting `ReasoningSummary` event when requested.
-    *   Claude call (behind feature flag) successfully emitting `ThinkingDelta` events from a real or mocked API response.
+    *   Claude call (behind feature flag) successfully emitting `ThinkingDelta` events from a real or mocked API response (including signature and redacted scenarios).
     *   Test multi-turn Claude conversations preserving the `thinking` block.
 *   **[ ] Action:** Perform end-to-end (e2e) testing using the CLI or UI to ensure the thinking streams and summaries are displayed correctly.
 

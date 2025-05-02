@@ -147,6 +147,7 @@ func (csf *ChatStep) Start(
 			}()
 
 			message := ""
+			accumulatedReasoning := "" // Variable to store accumulated reasoning
 
 			for {
 				select {
@@ -159,25 +160,34 @@ func (csf *ChatStep) Start(
 					response, err := stream.Recv()
 
 					if errors.Is(err, io.EOF) {
-						// Update both step metadata and event metadata with usage information
+						// Update both step metadata and event metadata with final usage information
 						if openaiMetadata, ok := stepMetadata.Metadata["openai-metadata"].(map[string]interface{}); ok {
-							if usage, ok := openaiMetadata["usage"].(map[string]interface{}); ok {
-								inputTokens, _ := cast.CastNumberInterfaceToInt[int](usage["prompt_tokens"])
-								outputTokens, _ := cast.CastNumberInterfaceToInt[int](usage["completion_tokens"])
+							if usageMap, ok := openaiMetadata["usage"].(map[string]interface{}); ok {
+								inputTokens, _ := cast.CastNumberInterfaceToInt[int](usageMap["prompt_tokens"])
+								outputTokens, _ := cast.CastNumberInterfaceToInt[int](usageMap["completion_tokens"])
+								var reasoningTokens int
+								// Extract reasoning tokens from completion_details if present
+								if compDetailsMap, ok := usageMap["completion_details"].(map[string]interface{}); ok {
+									reasoningTokens, _ = cast.CastNumberInterfaceToInt[int](compDetailsMap["reasoning_tokens"])
+								}
 								metadata.Usage = &conversation.Usage{
-									InputTokens:  inputTokens,
-									OutputTokens: outputTokens,
+									InputTokens:     inputTokens,
+									OutputTokens:    outputTokens,
+									ReasoningTokens: reasoningTokens,
 								}
 							}
 							if finishReason, ok := openaiMetadata["finish_reason"].(string); ok {
 								metadata.StopReason = &finishReason
 							}
 						}
+
 						csf.publisherManager.PublishBlind(events.NewFinalEvent(
 							metadata,
 							stepMetadata,
 							message,
 						))
+						// Final message content might need reasoning summary if it wasn't sent earlier?
+						// For now, just send the accumulated text.
 						messageContent := conversation.NewChatMessageContent(conversation.RoleAssistant, message, nil)
 						c <- helpers.NewValueResult[*conversation.Message](conversation.NewMessage(
 							messageContent,
@@ -199,33 +209,65 @@ func (csf *ChatStep) Start(
 						return
 					}
 					delta := ""
+					reasoningSummary := ""
 					if len(response.Choices) > 0 {
 						delta = response.Choices[0].Delta.Content
+						reasoningSummary = response.Choices[0].Delta.ReasoningContent
 						message += delta
+						// Store the reasoning summary if received
+						if reasoningSummary != "" {
+							accumulatedReasoning = reasoningSummary
+						}
 					}
 
-					// Extract metadata from OpenAI chat response and update both step and event metadata
-					if responseMetadata, err := ExtractChatCompletionMetadata(&response); err == nil && responseMetadata != nil {
-						stepMetadata.Metadata["openai-metadata"] = responseMetadata
-						if usage, ok := responseMetadata["usage"].(map[string]interface{}); ok {
-							inputTokens, _ := cast.CastNumberInterfaceToInt[int](usage["prompt_tokens"])
-							outputTokens, _ := cast.CastNumberInterfaceToInt[int](usage["completion_tokens"])
-							metadata.Usage = &conversation.Usage{
-								InputTokens:  inputTokens,
-								OutputTokens: outputTokens,
+					// Extract metadata from potentially partial stream response
+					if responseMetadataMap, err := ExtractChatCompletionMetadata(&response); err == nil && responseMetadataMap != nil {
+						// Update step metadata for persistence/final summary
+						stepMetadata.Metadata["openai-metadata"] = responseMetadataMap
+
+						// Update event metadata directly for more timely usage info
+						if usageMap, ok := responseMetadataMap["usage"].(map[string]interface{}); ok {
+							inputTokens, _ := cast.CastNumberInterfaceToInt[int](usageMap["prompt_tokens"])
+							outputTokens, _ := cast.CastNumberInterfaceToInt[int](usageMap["completion_tokens"])
+							var reasoningTokens int
+							if compDetailsMap, ok := usageMap["completion_details"].(map[string]interface{}); ok {
+								reasoningTokens, _ = cast.CastNumberInterfaceToInt[int](compDetailsMap["reasoning_tokens"])
+							}
+							// Initialize Usage if nil
+							if metadata.Usage == nil {
+								metadata.Usage = &conversation.Usage{}
+							}
+							// Update tokens only if provided in this chunk
+							if inputTokens > 0 {
+								metadata.Usage.InputTokens = inputTokens
+							}
+							if outputTokens > 0 {
+								metadata.Usage.OutputTokens = outputTokens
+							}
+							if reasoningTokens > 0 {
+								metadata.Usage.ReasoningTokens = reasoningTokens
 							}
 						}
-						if finishReason, ok := responseMetadata["finish_reason"].(string); ok {
+						if finishReason, ok := responseMetadataMap["finish_reason"].(string); ok && finishReason != "" {
 							metadata.StopReason = &finishReason
 						}
 					}
 
-					csf.publisherManager.PublishBlind(
-						events.NewPartialCompletionEvent(
-							metadata,
-							stepMetadata,
-							delta, message),
-					)
+					// Publish ThinkingDelta if reasoning content is present in this chunk
+					if reasoningSummary != "" {
+						accumulatedReasoning += reasoningSummary
+						csf.publisherManager.PublishBlind(events.NewThinkingDeltaEvent(metadata, stepMetadata, reasoningSummary, accumulatedReasoning))
+					}
+
+					// Always publish the text delta
+					if delta != "" {
+						csf.publisherManager.PublishBlind(
+							events.NewPartialCompletionEvent(
+								metadata,
+								stepMetadata,
+								delta, message),
+						)
+					}
 				}
 			}
 		}()
@@ -244,19 +286,30 @@ func (csf *ChatStep) Start(
 		}
 
 		// Extract metadata from non-streaming response
-		if usage := resp.Usage; usage.PromptTokens > 0 || usage.CompletionTokens > 0 {
-			metadata.Usage = &conversation.Usage{
-				InputTokens:  usage.PromptTokens,
-				OutputTokens: usage.CompletionTokens,
+		if usage := resp.Usage; usage.PromptTokens > 0 || usage.CompletionTokens > 0 || (usage.CompletionTokensDetails != nil && usage.CompletionTokensDetails.ReasoningTokens > 0) {
+			var reasoningTokens int
+			if usage.CompletionTokensDetails != nil {
+				reasoningTokens = usage.CompletionTokensDetails.ReasoningTokens
 			}
-			stepMetadata.Metadata["usage"] = map[string]interface{}{
-				"input_tokens":  usage.PromptTokens,
-				"output_tokens": usage.CompletionTokens,
+			metadata.Usage = &conversation.Usage{
+				InputTokens:     usage.PromptTokens,
+				OutputTokens:    usage.CompletionTokens,
+				ReasoningTokens: reasoningTokens,
+			}
+			stepMetadata.Metadata["usage"] = map[string]interface{}{ // Keep step metadata consistent
+				"input_tokens":     usage.PromptTokens,
+				"output_tokens":    usage.CompletionTokens,
+				"reasoning_tokens": reasoningTokens,
 			}
 		}
 		if len(resp.Choices) > 0 && resp.Choices[0].FinishReason != "" {
 			finishReason := string(resp.Choices[0].FinishReason)
 			metadata.StopReason = &finishReason
+		}
+
+		// Publish reasoning summary if present in non-streaming response
+		if len(resp.Choices) > 0 && resp.Choices[0].Message.ReasoningContent != "" {
+			csf.publisherManager.PublishBlind(events.NewReasoningSummaryEvent(metadata, stepMetadata, resp.Choices[0].Message.ReasoningContent))
 		}
 
 		csf.publisherManager.PublishBlind(events.NewFinalEvent(metadata, stepMetadata, resp.Choices[0].Message.Content))

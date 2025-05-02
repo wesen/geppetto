@@ -217,8 +217,9 @@ var _ MessageContent = (*ImageContent)(nil)
 
 // Usage represents token usage information common across LLM providers
 type Usage struct {
-	InputTokens  int `json:"input_tokens" yaml:"input_tokens" mapstructure:"input_tokens"`
-	OutputTokens int `json:"output_tokens" yaml:"output_tokens" mapstructure:"output_tokens"`
+	InputTokens     int `json:"input_tokens" yaml:"input_tokens" mapstructure:"input_tokens"`
+	OutputTokens    int `json:"output_tokens" yaml:"output_tokens" mapstructure:"output_tokens"`
+	ReasoningTokens int `json:"reasoning_tokens,omitempty" yaml:"reasoning_tokens,omitempty" mapstructure:"reasoning_tokens,omitempty"` // OpenAI o-series only
 }
 
 type LLMMessageMetadata struct {

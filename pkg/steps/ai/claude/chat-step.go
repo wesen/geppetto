@@ -134,6 +134,26 @@ func (csf *ChatStep) Start(
 		req.TopP = &defaultTopP
 	}
 
+	// Add thinking configuration if enabled
+	if csf.Settings.Claude.EnableThinking {
+		if csf.Settings.Claude.ThinkingBudget == nil {
+			// maybe default to max_tokens?
+			return steps.Reject[*conversation.Message](errors.New("claude-thinking-budget must be set when claude-enable-thinking is true")), nil
+		}
+		budget := *csf.Settings.Claude.ThinkingBudget
+		if budget < 1024 {
+			return steps.Reject[*conversation.Message](errors.Errorf("claude-thinking-budget (%d) must be >= 1024", budget)), nil
+		}
+		if budget > req.MaxTokens {
+			return steps.Reject[*conversation.Message](errors.Errorf("claude-thinking-budget (%d) must be <= max_tokens (%d)", budget, req.MaxTokens)), nil
+		}
+		req.Thinking = &api.ThinkingConfiguration{
+			Type:   "enabled",
+			Budget: budget,
+		}
+		log.Debug().Int("budget", budget).Msg("Claude thinking enabled")
+	}
+
 	metadata := events2.EventMetadata{
 		ID:       conversation.NewNodeID(),
 		ParentID: csf.parentID,
@@ -212,8 +232,20 @@ func (csf *ChatStep) Start(
 
 			case event, ok := <-eventCh:
 				if !ok {
-					// TODO(manuel, 2024-07-04) Probably not necessary, the completionMerger probably took care of it
+					// Publish final reasoning summary if accumulated
 					response := completionMerger.Response()
+					if response != nil {
+						finalReasoning := response.FullReasoning()
+						if finalReasoning != "" {
+							csf.subscriptionManager.PublishBlind(events2.NewReasoningSummaryEvent(metadata, stepMetadata, finalReasoning))
+						}
+					} else {
+						// Handle case where response is nil, though unlikely if stream ended cleanly
+						csf.subscriptionManager.PublishBlind(events2.NewErrorEvent(metadata, stepMetadata, errors.New("no response object at end of stream")))
+						c <- helpers2.NewErrorResult[*conversation.Message](errors.New("no response"))
+						return
+					}
+
 					if response == nil {
 						csf.subscriptionManager.PublishBlind(events2.NewErrorEvent(metadata, stepMetadata, errors.New("no response")))
 						c <- helpers2.NewErrorResult[*conversation.Message](errors.New("no response"))

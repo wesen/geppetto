@@ -2,19 +2,24 @@ package claude
 
 import (
 	_ "embed"
+
 	"github.com/go-go-golems/glazed/pkg/cmds/layers"
 	"github.com/huandu/go-clone"
 )
 
 type Settings struct {
-	TopK   *int    `yaml:"top_k,omitempty" glazed.parameter:"claude-top-k"`
-	UserID *string `yaml:"user_id,omitempty" glazed.parameter:"claude-user-id"`
+	TopK           *int    `yaml:"top_k,omitempty" glazed.parameter:"claude-top-k"`
+	UserID         *string `yaml:"user_id,omitempty" glazed.parameter:"claude-user-id"`
+	EnableThinking bool    `yaml:"enable_thinking,omitempty" glazed.parameter:"claude-enable-thinking"`
+	ThinkingBudget *int    `yaml:"thinking_budget,omitempty" glazed.parameter:"claude-thinking-budget"`
 }
 
 func NewSettings() (*Settings, error) {
 	s := &Settings{
-		TopK:   nil,
-		UserID: nil,
+		TopK:           nil,
+		UserID:         nil,
+		EnableThinking: false,
+		ThinkingBudget: nil,
 	}
 
 	p, err := NewParameterLayer()

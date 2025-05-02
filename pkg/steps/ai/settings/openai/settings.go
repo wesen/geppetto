@@ -2,6 +2,7 @@ package openai
 
 import (
 	_ "embed"
+
 	"github.com/go-go-golems/glazed/pkg/cmds/layers"
 	"github.com/huandu/go-clone"
 )
@@ -17,6 +18,10 @@ type Settings struct {
 	// TODO(manuel, 2023-03-28) Properly load logit bias
 	// See https://github.com/go-go-golems/geppetto/issues/48
 	LogitBias map[string]string `yaml:"logit_bias,omitempty" glazed.parameter:"openai-logit-bias"`
+	// ReasoningEffort sets the reasoning effort level (OpenAI o-series)
+	ReasoningEffort *string `yaml:"reasoning_effort,omitempty" glazed.parameter:"openai-reasoning-effort"`
+	// ReasoningSummary sets the reasoning summary detail level (OpenAI o-series)
+	ReasoningSummary *string `yaml:"reasoning_summary,omitempty" glazed.parameter:"openai-reasoning-summary"`
 }
 
 func NewSettings() (*Settings, error) {
@@ -25,6 +30,8 @@ func NewSettings() (*Settings, error) {
 		PresencePenalty:  nil,
 		FrequencyPenalty: nil,
 		LogitBias:        map[string]string{},
+		ReasoningEffort:  nil,
+		ReasoningSummary: nil,
 	}
 
 	p, err := NewParameterLayer()

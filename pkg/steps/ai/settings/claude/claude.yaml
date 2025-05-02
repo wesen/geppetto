@@ -18,3 +18,11 @@ flags:
     type: string
     help: API key
     default: ""
+  - name: claude-enable-thinking
+    type: bool
+    help: Enable Claude 3.7 extended thinking mode
+    default: false
+  - name: claude-thinking-budget
+    type: int
+    help: Token budget for Claude extended thinking (min 1024, requires --claude-enable-thinking)
+    default: 4096

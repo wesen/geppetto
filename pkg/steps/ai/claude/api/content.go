@@ -10,10 +10,12 @@ import (
 type ContentType string
 
 const (
-	ContentTypeText       ContentType = "text"
-	ContentTypeImage      ContentType = "image"
-	ContentTypeToolUse    ContentType = "tool_use"
-	ContentTypeToolResult ContentType = "tool_result"
+	ContentTypeText             ContentType = "text"
+	ContentTypeImage            ContentType = "image"
+	ContentTypeToolUse          ContentType = "tool_use"
+	ContentTypeToolResult       ContentType = "tool_result"
+	ContentTypeThinking         ContentType = "thinking"
+	ContentTypeRedactedThinking ContentType = "redacted_thinking"
 )
 
 type Content interface {
@@ -68,6 +70,49 @@ type ToolResultContent struct {
 
 func (t ToolResultContent) Type() ContentType {
 	return ContentTypeToolResult
+}
+
+// ThinkingContent represents a block of thinking text from the model.
+// This is part of the standard Claude API response when thinking is enabled.
+type ThinkingContent struct {
+	BaseContent
+	Text      string `json:"thinking"`
+	Signature string `json:"signature"`
+}
+
+// Type returns the content type.
+func (t ThinkingContent) Type() ContentType {
+	return ContentTypeThinking
+}
+
+// NewThinkingContent creates a new ThinkingContent block.
+// Used internally by the ContentBlockMerger.
+func NewThinkingContent(text string, signature string) Content {
+	return ThinkingContent{
+		BaseContent: BaseContent{Type_: ContentTypeThinking},
+		Text:        text,
+		Signature:   signature,
+	}
+}
+
+// RedactedThinkingContent represents an encrypted thinking block.
+type RedactedThinkingContent struct {
+	BaseContent
+	Data string `json:"data"`
+}
+
+// Type returns the content type.
+func (r RedactedThinkingContent) Type() ContentType {
+	return ContentTypeRedactedThinking
+}
+
+// NewRedactedThinkingContent creates a new RedactedThinkingContent block.
+// Used internally by the ContentBlockMerger.
+func NewRedactedThinkingContent(data string) Content {
+	return RedactedThinkingContent{
+		BaseContent: BaseContent{Type_: ContentTypeRedactedThinking},
+		Data:        data,
+	}
 }
 
 func NewTextContent(text string) Content {
@@ -138,6 +183,19 @@ func (trc ToolResultContent) MarshalZerologObject(e *zerolog.Event) {
 	e.Str("content", trc.Content)
 }
 
+func (tc ThinkingContent) MarshalZerologObject(e *zerolog.Event) {
+	e.Object("base", tc.BaseContent)
+	e.Str("thinking", tc.Text)
+	if tc.Signature != "" {
+		e.Str("signature", "[omitted]")
+	}
+}
+
+func (rtc RedactedThinkingContent) MarshalZerologObject(e *zerolog.Event) {
+	e.Object("base", rtc.BaseContent)
+	e.Str("data", "[omitted]")
+}
+
 func UnmarshalContent(data []byte) (Content, error) {
 	var base BaseContent
 	if err := json.Unmarshal(data, &base); err != nil {
@@ -169,6 +227,18 @@ func UnmarshalContent(data []byte) (Content, error) {
 			return nil, err
 		}
 		return toolResult, nil
+	case ContentTypeThinking:
+		var thinking ThinkingContent
+		if err := json.Unmarshal(data, &thinking); err != nil {
+			return nil, err
+		}
+		return thinking, nil
+	case ContentTypeRedactedThinking:
+		var redacted RedactedThinkingContent
+		if err := json.Unmarshal(data, &redacted); err != nil {
+			return nil, err
+		}
+		return redacted, nil
 	default:
 		return nil, fmt.Errorf("unknown content type: %s", base.Type_)
 	}

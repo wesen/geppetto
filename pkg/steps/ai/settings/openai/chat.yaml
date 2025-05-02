@@ -29,4 +29,21 @@ flags:
     type: string
     help: API key
     default: ""
+  - name: openai-reasoning-effort
+    type: choice
+    help: Reasoning effort level (OpenAI o-series)
+    default: auto
+    choices:
+      - auto
+      - low
+      - medium
+      - high
+  - name: openai-reasoning-summary
+    type: choice
+    help: Reasoning summary detail level (OpenAI o-series)
+    default: auto
+    choices:
+      - auto
+      - concise
+      - detailed
 
