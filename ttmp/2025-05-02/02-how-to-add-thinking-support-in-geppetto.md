@@ -110,8 +110,8 @@ This roadmap breaks down the integration into manageable phases, covering both A
 
 #### 5.1.1 OpenAI Client Update
 
-*   **[ ] Action:** Ensure `github.com/sashabaranov/go-openai` is updated to `v1.39.0` or later.
-*   **[ ] Action:** Add the new fields to the `openai.Settings` struct in `pkg/steps/ai/settings/openai/settings.go`:
+*   **[✅] Action:** Ensure `github.com/sashabaranov/go-openai` is updated to `v1.39.0` or later.
+*   **[✅] Action:** Add the new fields to the `openai.Settings` struct in `pkg/steps/ai/settings/openai/settings.go`:
     ```go
     // In geppetto/pkg/steps/ai/settings/openai/settings.go
     type Settings struct {
@@ -121,7 +121,7 @@ This roadmap breaks down the integration into manageable phases, covering both A
     }
     // Update NewSettings to provide defaults (\"auto\")
     ```
-*   **[ ] Action:** Define the corresponding flags in `pkg/steps/ai/settings/openai/chat.yaml`:
+*   **[✅] Action:** Define the corresponding flags in `pkg/steps/ai/settings/openai/chat.yaml`:
     ```yaml
     # In geppetto/pkg/steps/ai/settings/openai/chat.yaml (add to existing flags)
     flags:
@@ -144,17 +144,17 @@ This roadmap breaks down the integration into manageable phases, covering both A
          - concise
          - detailed
     ```
-*   **[ ] Action:** Modify the code that constructs `openai.ChatCompletionRequest` to read `*settings.OpenAI.ReasoningEffort` and `*settings.OpenAI.ReasoningSummary` and include them in the request if they are not the default "auto" value (or handle "auto" appropriately based on API behavior).
+*   **[✅] Action:** Modify the code that constructs `openai.ChatCompletionRequest` to read `*settings.OpenAI.ReasoningEffort` and `*settings.OpenAI.ReasoningSummary` and include them in the request if they are not the default "auto" value (or handle "auto" appropriately based on API behavior).
 
 #### 5.1.2 Claude Client Schema Patch
 
 *(Updated based on final implementation)*
 
-*   [X] Action: Define Go structs mirroring the new `thinking` request parameter (`ThinkingConfiguration` in `api/messages.go`).
-*   [X] Action: Add the `EnableThinking` and `ThinkingBudget` fields to `claude.Settings` (`settings.go`) and define corresponding flags in `claude.yaml`.
-*   [X] Action: Modify the code constructing the Claude API request (`chat-step.go`) to add the `thinking` block based on settings, including validation.
-*   [X] Action: Implement logic to preserve thinking context in multi-turn chats (relying on standard message history inclusion via `makeMessageRequest`).
-*   [X] Action: Update API definitions (`api/content.go`, `api/streaming.go`) to correctly handle `thinking`, `thinking_delta`, `signature_delta`, and `redacted_thinking` types and payloads.
+*   [✅] Action: Define Go structs mirroring the new `thinking` request parameter (`ThinkingConfiguration` in `api/messages.go`).
+*   [✅] Action: Add the `EnableThinking` and `ThinkingBudget` fields to `claude.Settings` (`settings.go`) and define corresponding flags in `claude.yaml`.
+*   [✅] Action: Modify the code constructing the Claude API request (`chat-step.go`) to add the `thinking` block based on settings, including validation.
+*   [✅] Action: Implement logic to preserve thinking context in multi-turn chats (relying on standard message history inclusion via `makeMessageRequest`).
+*   [✅] Action: Update API definitions (`api/content.go`, `api/streaming.go`) to correctly handle `thinking`, `thinking_delta`, `signature_delta`, and `redacted_thinking` types and payloads.
 
 ### 5.2 Phase 2: Geppetto Event Layer Upgrade (`pkg/events`)
 
@@ -162,7 +162,7 @@ This is crucial for propagating the new information from the API clients to down
 
 #### 5.2.1 Extending the `EventType` Enum
 
-*   **[ ] Action:** Add new constants to `EventType` in `chat-events.go`:
+*   **[✅] Action:** Add new constants to `EventType` in `chat-events.go`:
     ```go
     // In geppetto/pkg/events/chat-events.go
     const (
@@ -184,7 +184,7 @@ This is crucial for propagating the new information from the API clients to down
 
 #### 5.2.2 Defining New Event Payload Structs
 
-*   **[ ] Action:** Define new structs in `chat-events.go` to carry the specific payloads for these event types. They should embed `EventImpl` like existing events.
+*   **[✅] Action:** Define new structs in `chat-events.go` to carry the specific payloads for these event types. They should embed `EventImpl` like existing events.
     ```go
     // In geppetto/pkg/events/chat-events.go
 
@@ -234,7 +234,7 @@ This is crucial for propagating the new information from the API clients to down
 
 #### 5.2.3 Updating the Event Factory (`NewEventFromJson`)
 
-*   **[ ] Action:** Modify the `NewEventFromJson` function in (likely) `chat-events.go` or a dedicated `json.go` file to handle the new types:
+*   **[✅] Action:** Modify the `NewEventFromJson` function in (likely) `chat-events.go` or a dedicated `json.go` file to handle the new types:
     ```go
     // In geppetto/pkg/events/json.go (or wherever NewEventFromJson resides)
     func NewEventFromJson(b []byte) (Event, error) {
@@ -254,18 +254,18 @@ This is crucial for propagating the new information from the API clients to down
         // Add new cases:
         case EventTypeThinkingDelta:
             // Use a helper that properly unmarshals the payload into EventThinkingDelta
-            typedEvent, err := base.ToThinkingDelta()
-            if err != nil { return nil, err } // Define ToThinkingDelta helper
+            typedEvent, ok := base.ToThinkingDelta()
+            if !ok { return nil, fmt.Errorf("failed to cast to EventThinkingDelta") }
             return typedEvent, nil
         case EventTypeReasoningSummary:
             // Use a helper that properly unmarshals the payload into EventReasoningSummary
-            typedEvent, err := base.ToReasoningSummary()
-            if err != nil { return nil, err } // Define ToReasoningSummary helper
+            typedEvent, ok := base.ToReasoningSummary()
+            if !ok { return nil, fmt.Errorf("failed to cast to EventReasoningSummary") }
             return typedEvent, nil
         case EventTypeSignatureDelta: // Optional
             // Use a helper that properly unmarshals the payload into EventSignatureDelta
-            typedEvent, err := base.ToSignatureDelta() // Define ToSignatureDelta helper
-            if err != nil { return nil, err }
+            typedEvent, ok := base.ToSignatureDelta()
+            if !ok { return nil, fmt.Errorf("failed to cast to EventSignatureDelta") }
             return typedEvent, nil
 
 
@@ -276,14 +276,17 @@ This is crucial for propagating the new information from the API clients to down
     }
 
     // Define necessary helper methods on EventImpl or elsewhere
-    func (e *EventImpl) ToThinkingDelta() (*EventThinkingDelta, error) {
+    func (e *EventImpl) ToThinkingDelta() (*EventThinkingDelta, bool) {
+        if e.Type() != EventTypeThinkingDelta {
+            return nil, false
+        }
         var typedEvent EventThinkingDelta
         if err := json.Unmarshal(e.payload, &typedEvent); err != nil {
-            return nil, fmt.Errorf("failed to unmarshal thinking delta payload: %w", err)
+            return nil, false
         }
         // Copy base fields if not automatically handled by embedding unmarshal
         typedEvent.EventImpl = *e
-        return &typedEvent, nil
+        return &typedEvent, true
     }
 
     // Similar helpers for ToReasoningSummary, ToSignatureDelta...
@@ -291,7 +294,7 @@ This is crucial for propagating the new information from the API clients to down
 
 #### 5.2.4 Extending the `ChatEventHandler` Interface
 
-*   **[ ] Action:** Add handler methods for the new event types to the `ChatEventHandler` interface (likely in `event-router.go` or `chat-events.go`):
+*   **[✅] Action:** Add handler methods for the new event types to the `ChatEventHandler` interface (likely in `event-router.go` or `chat-events.go`):
     ```go
     // In geppetto/pkg/events/event-router.go (or similar)
     type ChatEventHandler interface {
@@ -310,7 +313,7 @@ This is crucial for propagating the new information from the API clients to down
         // Optional: HandleSignatureDelta(ctx context.Context, e *EventSignatureDelta) error
     }
     ```
-*   **[ ] Action:** Update the router dispatch logic (e.g., in `createChatDispatchHandler` in `event-router.go`) to call these new handler methods based on the event type.
+*   **[✅] Action:** Update the router dispatch logic (e.g., in `createChatDispatchHandler` in `event-router.go`) to call these new handler methods based on the event type.
 
 #### 5.2.5 Updating Event Printers
 
@@ -320,7 +323,7 @@ This is crucial for propagating the new information from the API clients to down
 
 #### 5.2.6 Enhancing Metadata (Optional)
 
-*   **[ ] Action:** Consider adding a `ReasoningTokens` field to the `UsageInfo` struct (if one exists within `EventMetadata` or a similar structure) to capture OpenAI's specific usage data.
+*   **[✅] Action:** Consider adding a `ReasoningTokens` field to the `UsageInfo` struct (if one exists within `EventMetadata` or a similar structure) to capture OpenAI's specific usage data.
     ```go
     // Potentially in geppetto/pkg/events/chat-events.go or similar
     type UsageInfo struct {
@@ -343,7 +346,7 @@ This involves modifying the code that processes the streaming responses from the
 
 #### 5.3.1 OpenAI Stream Adapter
 
-*   [X] Action: In the code handling the `go-openai` stream, check the final stream chunk for the `delta.ReasoningContent` field. If present, publish an `EventReasoningSummary`:
+*   [✅] Action: In the code handling the `go-openai` stream, check the final stream chunk for the `delta.ReasoningContent` field. If present, publish an `EventReasoningSummary`:
     ```go
     // Example within OpenAI stream processing loop
     if streamResp.Choices[0].Delta.ReasoningContent != "" { // NOTE: Assumed field name is ReasoningContent
@@ -359,16 +362,19 @@ This involves modifying the code that processes the streaming responses from the
 
 #### 5.3.2 Claude Stream Adapter
 
-*   [X] Action: Enhance the Claude stream processing, primarily within `ContentBlockMerger` (`pkg/steps/ai/claude/content-block-merger.go`):
-    *   Correctly handle `ContentBlockDeltaType` events with `delta.Type` set to `ThinkingDeltaType` or `SignatureDeltaType`.
-    *   Accumulate thinking text chunks (`delta.Thinking`) into an internal `ContentBlock` at a dedicated index (`internalThinkingBlockIndex`).
-    *   Store the signature (`delta.Signature`) onto the internal thinking `ContentBlock`.
-    *   Publish `EventThinkingDelta` for each thinking chunk.
-    *   Handle `ContentBlockStartType` for `redacted_thinking` blocks.
-    *   Handle `ContentBlockStopType` for `thinking` (no-op as finalized in `MessageStopType`) and `redacted_thinking` (adds block to response).
-    *   Finalize and add the accumulated `ThinkingContent` (including signature) or `RedactedThinkingContent` blocks to `response.Content` during `ContentBlockStopType` or `MessageStopType`.
-    *   Correctly accumulate `Usage` information, especially output tokens.
-    *   Refine event emission (`PartialCompletionEvent`, `FinalEvent`) to use the finalized content representation (`getFinalizedText()`).
+*   [✅] Action: Enhance the Claude stream processing, primarily within `ContentBlockMerger` (`pkg/steps/ai/claude/content-block-merger.go`):
+    *   [✅] Correctly handle `ContentBlockDeltaType` events with `delta.Type` set to `ThinkingDeltaType` or `SignatureDeltaType`.
+    *   [✅] Accumulate thinking text chunks (`delta.Thinking`) into an internal `ContentBlock` at a dedicated index (`internalThinkingBlockIndex`).
+    *   [✅] Store the signature (`delta.Signature`) onto the internal thinking `ContentBlock`.
+    *   [✅] Publish `EventThinkingDelta` for each thinking chunk.
+    *   [✅] Handle `ContentBlockStartType` for `redacted_thinking` blocks.
+    *   [✅] Handle `ContentBlockStopType` for `thinking` (no-op as finalized in `MessageStopType`) and `redacted_thinking` (adds block to response).
+    *   [✅] Finalize and add the accumulated `ThinkingContent` (including signature) or `RedactedThinkingContent` blocks to `response.Content` during `ContentBlockStopType` or `MessageStopType`.
+    *   [✅] Correctly accumulate `Usage` information, especially output tokens.
+    *   [✅] Refine event emission (`PartialCompletionEvent`, `FinalEvent`) to use the finalized content representation (`getFinalizedText()`).
+    *   [✅] Ensure finalized content ordering is correct (thinking blocks should appear first in the response content)
+    *   [✅] Fix Text() accumulation to properly handle text and tool use blocks together
+    *   [✅] Make ContentBlockStopType handler more resilient to duplicate stop events
 
 ### 5.4 Phase 4: Testing and Validation
 
@@ -377,11 +383,12 @@ This involves modifying the code that processes the streaming responses from the
     *   `NewEventFromJson` correctly identifying and parsing new types.
     *   Router dispatching new event types to the correct (mock) handlers.
     *   Printer output correctness for new event types (snapshot testing).
-*   [X] Action: Update Claude `ContentBlockMerger` unit tests (`content-block-merger_test.go`) to cover:
-    *   Handling of `thinking_delta` and `signature_delta` events.
-    *   Handling of `redacted_thinking` blocks.
-    *   Correct usage accumulation.
-    *   Correct final response content structure.
+*   [✅] Action: Update Claude `ContentBlockMerger` unit tests (`content-block-merger_test.go`) to cover:
+    *   [✅] Handling of `thinking_delta` and `signature_delta` events.
+    *   [✅] Handling of `redacted_thinking` blocks.
+    *   [✅] Correct usage accumulation.
+    *   [✅] Correct final response content structure.
+    *   [✅] Fixed issues with thinking block ordering and internal state tracking
 *   **[ ] Action:** Write integration tests:
     *   OpenAI call successfully emitting `ReasoningSummary` event when requested.
     *   Claude call (behind feature flag) successfully emitting `ThinkingDelta` events from a real or mocked API response (including signature and redacted scenarios).
@@ -392,13 +399,13 @@ This involves modifying the code that processes the streaming responses from the
 
 | Day   | Deliverable(s)                                                              | Testing       | Status |
 | :---- | :-------------------------------------------------------------------------- | :------------ | :----- |
-| **1** | Update OpenAI lib, Define Claude structs & YAML flags, Add EventType enum values | Unit          | `[ ]`  |
-| **2** | Define Event payload structs & builders, Update `NewEventFromJson` & helpers | Unit          | `[ ]`  |
-| **3** | Extend `ChatEventHandler`, Update Router, Update Printers                 | Unit          | `[ ]`  |
-| **4** | Implement OpenAI adapter changes (emit `ReasoningSummary`)                | Integration   | `[ ]`  |
-| **5** | Implement Claude schema patch (request building, validation using flags)    | Unit          | `[ ]`  |
-| **6-7** | Implement Claude SSE adapter (emit `ThinkingDelta`), feature flag         | Integration   | `[ ]`  |
-| **8** | Add metadata enhancements (optional), Comprehensive testing (Unit, Integ) | Unit, Integ | `[ ]`  |
+| **1** | Update OpenAI lib, Define Claude structs & YAML flags, Add EventType enum values | Unit          | `[✅]`  |
+| **2** | Define Event payload structs & builders, Update `NewEventFromJson` & helpers | Unit          | `[✅]`  |
+| **3** | Extend `ChatEventHandler`, Update Router, Update Printers                 | Unit          | `[✅]` (Printers pending) |
+| **4** | Implement OpenAI adapter changes (emit `ReasoningSummary`)                | Integration   | `[✅]`  |
+| **5** | Implement Claude schema patch (request building, validation using flags)    | Unit          | `[✅]`  |
+| **6-7** | Implement Claude SSE adapter (emit `ThinkingDelta`), feature flag, Handle block ordering and text accumulation | Integration   | `[✅]`  |
+| **8** | Add metadata enhancements (optional), Comprehensive testing (Unit, Integ) | Unit, Integ | `[✅]` (Just need integration tests) |
 | **9** | E2E testing (CLI/UI), Documentation updates (READMEs, examples)           | E2E           | `[ ]`  |
 | **10**| Merge feature branches, Tag release (e.g., `geppetto v0.6.0`)             | Regression    | `[ ]`  |
 
@@ -410,11 +417,14 @@ Integrating these advanced reasoning features positions Geppetto at the forefron
 
 **Immediate Next Steps:**
 
-1.  Confirm the OpenAI library and update it (`go get`). Add corresponding Go struct fields and YAML flag definitions.
-2.  Add Claude Go struct fields and YAML flag definitions.
-3.  Create feature branches (`openai-reasoning`, `claude-thinking`).
-4.  Begin implementing Phase 1 (API updates using new settings) and Phase 2 (Event layer extensions) concurrently or sequentially based on developer availability.
-5.  Focus heavily on testing, particularly the Claude SSE parsing and multi-turn state management.
+1.  ✅ Confirm the OpenAI library and update it (`go get`). Add corresponding Go struct fields and YAML flag definitions.
+2.  ✅ Add Claude Go struct fields and YAML flag definitions.
+3.  ✅ Create feature branches (`openai-reasoning`, `claude-thinking`).
+4.  ✅ Begin implementing Phase 1 (API updates using new settings) and Phase 2 (Event layer extensions) concurrently or sequentially based on developer availability.
+5.  ✅ Implement `ContentBlockMerger` changes for Claude SSE integration.
+6.  ✅ Fix content block ordering, text accumulation, and duplicate handle stops for ContentBlockMerger
+7.  Implement event printer updates for CLI/UI visualization
+8.  Focus on remaining testing, particularly integration and E2E tests.
 
 This foundational work enables future enhancements, such as visualizing the thinking process in the UI or allowing users finer-grained control over reasoning parameters.
 
@@ -438,4 +448,4 @@ This foundational work enables future enhancements, such as visualizing the thin
     *   [crewAI Bug (Thinking Block Preservation)](https://github.com/crewAIInc/crewAI/issues/2323) - Illustrates the importance of multi-turn state.
 
 ---
-*This document consolidates planning notes and incorporates details from the Geppetto codebase (`pkg/events/`, `pkg/steps/ai/settings/`). Refer to the specific files mentioned for the most up-to-date implementation details.* 
+*This document consolidates planning notes and incorporates details from the Geppetto codebase (`pkg/events/`, `pkg/steps/ai/settings/`). Refer to the specific files mentioned for the most up-to-date implementation details. Progress as of May 2025.* 
