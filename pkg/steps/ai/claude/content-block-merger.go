@@ -245,11 +245,36 @@ func (cbm *ContentBlockMerger) Add(event api.StreamingEvent) ([]events.Event, er
 				Input: cb.Input,
 			})}, nil
 
-		case api.ContentTypeImage, api.ContentTypeToolResult:
-			return nil, errors.Errorf("Unsupported content block type: %s", cb.Type)
-		}
+		case api.ContentTypeImage:
+			// Add support for images in the future
+			// TODO(manuel, 2025-05-13) I'm not sure if ampcode correctly added handling the tool result here, it was marked as error before.
+			log.Debug().Str("content_type", string(cb.Type)).Msg("Skipping image content block")
+			return []events.Event{}, nil
 
-		return nil, errors.Errorf("Unknown content block type: %s", cb.Type)
+		case api.ContentTypeToolResult:
+			// TODO(manuel, 2025-05-13) I'm not sure if ampcode correctly added handling the tool result here, it was marked as error before.
+			// Add the tool result to the response content
+			cbm.response.Content = append(cbm.response.Content, api.NewToolResultContent(cb.ID, cb.Text))
+			log.Debug().Str("content_type", string(cb.Type)).Str("tool_use_id", cb.ID).Msg("Added tool result content block")
+			return []events.Event{}, nil
+
+		default:
+			// Handle unknown content types gracefully
+			log.Info().Str("content_type", string(cb.Type)).Msg("Encountered unknown content block type")
+			// Create a generic content to store the data
+			genericData := map[string]interface{}{
+				"id":    cb.ID,
+				"name":  cb.Name,
+				"input": cb.Input,
+				"text":  cb.Text,
+			}
+			genericContent := api.GenericContent{
+				BaseContent: api.BaseContent{Type_: cb.Type},
+				Data:        genericData,
+			}
+			cbm.response.Content = append(cbm.response.Content, genericContent)
+			return []events.Event{}, nil
+		}
 
 	case api.ErrorType:
 		if event.Error == nil {

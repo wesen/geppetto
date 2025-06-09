@@ -29,6 +29,9 @@ linters:
     rules:
       - linters:
           - staticcheck
+        text: 'QF1008'
+      - linters:
+          - staticcheck
         text: 'SA1019: cli.CreateProcessorLegacy'
 
 # Formatters configuration

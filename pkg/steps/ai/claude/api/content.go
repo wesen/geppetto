@@ -2,7 +2,6 @@ package api
 
 import (
 	"encoding/json"
-	"fmt"
 
 	"github.com/rs/zerolog"
 )
@@ -68,6 +67,17 @@ type ToolResultContent struct {
 
 func (t ToolResultContent) Type() ContentType {
 	return ContentTypeToolResult
+}
+
+// GenericContent represents an unknown content type from the API
+// This allows us to handle new content types gracefully
+type GenericContent struct {
+	BaseContent
+	Data map[string]interface{} `json:"data"`
+}
+
+func (g GenericContent) Type() ContentType {
+	return g.Type_
 }
 
 func NewTextContent(text string) Content {
@@ -138,6 +148,11 @@ func (trc ToolResultContent) MarshalZerologObject(e *zerolog.Event) {
 	e.Str("content", trc.Content)
 }
 
+func (gc GenericContent) MarshalZerologObject(e *zerolog.Event) {
+	e.Object("base", gc.BaseContent)
+	e.Interface("data", gc.Data)
+}
+
 func UnmarshalContent(data []byte) (Content, error) {
 	var base BaseContent
 	if err := json.Unmarshal(data, &base); err != nil {
@@ -170,6 +185,15 @@ func UnmarshalContent(data []byte) (Content, error) {
 		}
 		return toolResult, nil
 	default:
-		return nil, fmt.Errorf("unknown content type: %s", base.Type_)
+		// For unknown content types, create a generic content object that preserves the type
+		// This makes the system more resilient to API changes from Anthropic
+		var rawContent map[string]interface{}
+		if err := json.Unmarshal(data, &rawContent); err != nil {
+			return nil, err
+		}
+		return GenericContent{
+			BaseContent: BaseContent{Type_: base.Type_},
+			Data:        rawContent,
+		}, nil
 	}
 }

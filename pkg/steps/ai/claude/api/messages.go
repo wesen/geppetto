@@ -118,7 +118,8 @@ func (m MessageResponse) FullText() string {
 		case TextContent:
 			res += v.Text
 		case ImageContent:
-		// skip images for now
+			// skip images for now
+			log.Debug().Str("content_type", string(v.Type())).Msg("Skipping image content in FullText")
 		case ToolUseContent:
 			res += "Tool Call: " + v.Name + "\n"
 			res += "ID: " + v.ID + "\n"
@@ -126,8 +127,18 @@ func (m MessageResponse) FullText() string {
 		case ToolResultContent:
 			res += "Tool Call Result: " + v.ToolUseID + "\n"
 			res += v.Content
+		case GenericContent:
+			// For generic content, include type information and any text if available
+			contentType := string(v.Type())
+			log.Debug().Str("content_type", contentType).Interface("data", v.Data).Msg("Processing generic content in FullText")
+			res += "[" + contentType + " content]\n"
+			// If there's text in the data, include it
+			if text, ok := v.Data["text"].(string); ok && text != "" {
+				res += text
+			}
 		default:
-
+			// Log unknown content types for debugging
+			log.Warn().Str("content_type", string(c.Type())).Msg("Unknown content type in MessageResponse.FullText")
 		}
 	}
 	return res
