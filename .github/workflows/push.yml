@@ -19,14 +19,14 @@ jobs:
           go-version-file: go.mod
           cache: true
       -
+        name: verify logcopter package loggers
+        run: make logcopter-check
+      -
         name: generate assets
         run: go generate ./...
       -
         name: verify generated files are up to date
         run: git diff --exit-code
-      -
-        name: verify logcopter package loggers
-        run: go tool logcopter-gen -area-prefix go-go-golems.geppetto -strip-prefix github.com/go-go-golems/geppetto -check ./pkg/...
       -
         name: run unit tests
         run: go test ./...
